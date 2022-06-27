@@ -17,6 +17,7 @@
 #define LOG_TAG "drm-buffer"
 
 #include <drmbuffer.h>
+#include <drm_fourcc.h>
 #include <rockchip/utils/drmdebug.h>
 
 #include <sync/sync.h>
@@ -40,11 +41,11 @@ static uint64_t getUniqueId() {
 #define RK_GRALLOC_USAGE_WITHIN_4G (1ULL << 56)
 #endif
 
-#ifndef RK_GRALLOC_USAGE_STRIDE_ALIGN_64
-#define RK_GRALLOC_USAGE_STRIDE_ALIGN_64 (1ULL << 60)
+#ifndef RK_GRALLOC_USAGE_STRIDE_ALIGN_16
+#define RK_GRALLOC_USAGE_STRIDE_ALIGN_16 (1ULL << 57)
 #endif
 
-DrmBuffer::DrmBuffer(int w, int h, int format, std::string name):
+DrmBuffer::DrmBuffer(int w, int h, int format, uint64_t usage, std::string name):
   uId(getUniqueId()),
   iFd_(-1),
   iWidth_(w),
@@ -52,7 +53,10 @@ DrmBuffer::DrmBuffer(int w, int h, int format, std::string name):
   iFormat_(format),
   iStride_(-1),
   iByteStride_(-1),
-  iUsage_(GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_PRIVATE_1 | RK_GRALLOC_USAGE_WITHIN_4G | RK_GRALLOC_USAGE_STRIDE_ALIGN_64),
+  iUsage_(GRALLOC_USAGE_HW_COMPOSER        |
+          GRALLOC_USAGE_PRIVATE_1          |
+          RK_GRALLOC_USAGE_WITHIN_4G       |
+          usage),
   uFourccFormat_(0),
   uModifier_(0),
   iFinishFence_(-1),
@@ -71,6 +75,11 @@ DrmBuffer::~DrmBuffer(){
   if(ptrBuffer_ != NULL){
     ptrBuffer_ = NULL;
   }
+
+  if (uFbId_ > 0)
+    if (drmModeRmFB(ptrDrmGralloc_->get_drm_device(), uFbId_)){
+      ALOGE("Failed to rm fb %d", uFbId_);
+    }
 
   int ret = ptrDrmGralloc_->hwc_free_gemhandle(uBufferId_);
   if(ret){
@@ -110,6 +119,7 @@ int DrmBuffer::Init(){
     HWC2_ALOGE("%s hwc_get_gemhandle_from_fd fail, buffer_id =%" PRIx64, sName_.c_str(), uBufferId_);
     return -1;
   }
+  uFbId_ = 0;
   bInit_ = true;
 
   return 0;
@@ -162,6 +172,81 @@ uint64_t DrmBuffer::GetBufferId(){
 }
 uint32_t DrmBuffer::GetGemHandle(){
   return uGemHandle_;
+}
+
+uint32_t DrmBuffer::DrmFormatToPlaneNum(uint32_t drm_format) {
+  switch (drm_format) {
+    case DRM_FORMAT_NV12:
+    case DRM_FORMAT_NV21:
+    case DRM_FORMAT_NV24:
+    case DRM_FORMAT_NV42:
+    case DRM_FORMAT_NV16:
+    case DRM_FORMAT_NV61:
+    case DRM_FORMAT_NV12_10:
+    case DRM_FORMAT_NV15:
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+uint32_t DrmBuffer::GetFbId(){
+  if(uFbId_ > 0)
+    return uFbId_;
+  uint32_t pitches[4] = {0};
+  uint32_t offsets[4] = {0};
+  uint32_t gem_handles[4] = {0};
+  uint64_t modifier[4] = {0};
+
+  pitches[0] = iByteStride_;
+  gem_handles[0] = uGemHandle_;
+  offsets[0] = 0;
+
+  if(DrmFormatToPlaneNum(uFourccFormat_) == 2){
+    if(uFourccFormat_ == DRM_FORMAT_NV24 ||
+       uFourccFormat_ == DRM_FORMAT_NV42){
+      pitches[1] = pitches[0]*2;
+      gem_handles[1] = uGemHandle_;
+      offsets[1] = pitches[0] * iHeight_;
+    }else{
+      pitches[1] = pitches[0];
+      gem_handles[1] = uGemHandle_;
+      offsets[1] = pitches[1] * iHeight_;
+    }
+  }
+
+  modifier[0] = uModifier_;
+  if(DrmFormatToPlaneNum(uFourccFormat_) == 2)
+    modifier[1] = uModifier_;
+
+  int ret = drmModeAddFB2WithModifiers(ptrDrmGralloc_->get_drm_device(),
+                                       iWidth_,
+                                       iHeight_,
+                                       uFourccFormat_,
+                                       gem_handles,
+                                       pitches,
+                                       offsets,
+                                       modifier,
+		                                   &uFbId_,
+                                       DRM_MODE_FB_MODIFIERS);
+
+  HWC2_ALOGD_IF_DEBUG("ImportBuffer fd=%d,w=%d,h=%d,bo->format=%c%c%c%c,"
+                      "gem_handle=%d,bo->pitches[0]=%d,fb_id=%d,modifier = %" PRIx64 ,
+                       ptrDrmGralloc_->get_drm_device(),iWidth_, iHeight_,
+                       uFourccFormat_, uFourccFormat_ >> 8, uFourccFormat_ >> 16, uFourccFormat_ >> 24,
+                       gem_handles[0], pitches[0], uFbId_, modifier[0]);
+
+  if (ret) {
+    ALOGE("could not create drm fb %d", ret);
+    HWC2_ALOGE("ImportBuffer fd=%d,w=%d,h=%d,bo->format=%c%c%c%c,"
+               "gem_handle=%d,bo->pitches[0]=%d,fb_id=%d,modifier = %" PRIx64 ,
+                ptrDrmGralloc_->get_drm_device(),iWidth_, iHeight_,
+                uFourccFormat_, uFourccFormat_ >> 8, uFourccFormat_ >> 16, uFourccFormat_ >> 24,
+                gem_handles[0], pitches[0], uFbId_, modifier[0]);
+    return ret;
+  }
+
+  return uFbId_;
 }
 void* DrmBuffer::Lock(){
   if(!buffer_){

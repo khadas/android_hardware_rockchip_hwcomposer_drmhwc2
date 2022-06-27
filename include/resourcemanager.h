@@ -24,10 +24,12 @@
 #include "drmdisplaycompositor.h"
 #include "drmhwctwo.h"
 
+#include "drmbufferqueue.h"
+
 #include <string.h>
 #include <set>
 #include <map>
-
+#include <mutex>
 namespace android {
 class DrmDisplayCompositor;
 class DrmHwcTwo;
@@ -80,6 +82,19 @@ class ResourceManager {
   int getSocId() { return soc_id_;}
   std::shared_ptr<DrmDisplayCompositor> GetDrmDisplayCompositor(DrmCrtc* crtc);
 
+  // WriteBack interface.
+  int GetWBDisplay() const;
+  bool isWBMode() const;
+  const DrmMode &GetWBMode() const;
+  int EnableWriteBackMode(int display);
+  int DisableWriteBackMode(int display);
+  int UpdateWriteBackResolution(int display);
+  std::shared_ptr<DrmBuffer> GetResetWBBuffer();
+  std::shared_ptr<DrmBuffer> GetNextWBBuffer();
+  std::shared_ptr<DrmBuffer> GetDrawingWBBuffer();
+  std::shared_ptr<DrmBuffer> GetFinishWBBuffer();
+  int SwapWBBuffer();
+  // WriteBack interface.
 
  private:
   ResourceManager();
@@ -100,6 +115,20 @@ class ResourceManager {
   int soc_id_;
   int drmVersion_;
   bool dynamic_assigin_enable_;
+
+  int bEnableWriteBack_=0;
+  int iWriteBackDisplayId_=-1;
+  int iWBWidth_;
+  int iWBHeight_;
+  int iWBFormat_;
+  DrmMode mWBMode_;
+  std::shared_ptr<DrmBufferQueue> mWriteBackBQ_;
+  std::shared_ptr<DrmBuffer> mResetBackBuffer_;
+  std::shared_ptr<DrmBuffer> mNextWriteBackBuffer_;
+  std::shared_ptr<DrmBuffer> mDrawingWriteBackBuffer_;
+  std::shared_ptr<DrmBuffer> mFinishWriteBackBuffer_;
+
+  mutable std::mutex mtx_;
 };
 }  // namespace android
 

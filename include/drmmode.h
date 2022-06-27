@@ -87,6 +87,9 @@ class DrmMode {
   bool is_8k_mode() const;
   bool is_4k120p_mode() const;
 
+  uint32_t width() const;
+  uint32_t height() const;
+
   std::string name() const;
 
  private:

@@ -299,4 +299,12 @@ bool DrmMode::is_4k120p_mode() const {
   return false;
 }
 
+uint32_t DrmMode::width() const {
+    return h_display_;
+}
+
+uint32_t DrmMode::height() const {
+    return v_display_;
+}
+
 }  // namespace android

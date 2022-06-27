@@ -243,7 +243,7 @@ int DrmDisplayComposition::SignalCompositionDone() {
     return -1;
 
   if(signal_){
-    HWC2_ALOGD_IF_VERBOSE("Have been signal frame = %" PRIu64", not to signal.",frame_no_);
+    HWC2_ALOGD_IF_DEBUG("Have been signal frame = %" PRIu64", not to signal.", frame_no_);
     return 0;
   }
   HWC2_ALOGD_IF_DEBUG("Will to signal frame = %" PRIu64,frame_no_);
@@ -262,6 +262,12 @@ int DrmDisplayComposition::SignalCompositionDone() {
 
   for (DrmHwcLayer *layer : comp_layers) {
     if (!layer || !layer->release_fence->isValid()){
+      if(layer)
+        HWC2_ALOGD_IF_DEBUG("Fd(%d)isValid %d frame = %" PRIu64 " %s Info: size=%d act=%d signal=%d err=%d LayerName=%s ",
+                          layer->release_fence->getFd(), layer->release_fence->isValid(),
+                          frame_no_,layer->release_fence->getName().c_str(),layer->release_fence->getSize(),layer->release_fence->getActiveCount(),
+                          layer->release_fence->getSignaledCount(),layer->release_fence->getErrorCount(),
+                          layer->sLayerName_.c_str());
       continue;
     }
     int act,sig;
@@ -270,12 +276,15 @@ int DrmDisplayComposition::SignalCompositionDone() {
       sig = layer->release_fence->getSignaledCount();
     }
     int ret = layer->release_fence->signal();
-    if(LogLevel(DBG_DEBUG))
-      HWC2_ALOGD_IF_DEBUG("Signal %s frame = %" PRIu64 " %s Info: size=%d act=%d signal=%d err=%d LayerName=%s ",
+    if(LogLevel(DBG_DEBUG)){
+      HWC2_ALOGD_IF_DEBUG("Signal %s frame = %" PRIu64 " %s Info: size=%d act=%d signal=%d err=%d LayerName=%s BufferId=0x%" PRIx64 " SignalTime=%s" ,
                           act == 1 && sig == 0 && layer->release_fence->getActiveCount() == 0 && layer->release_fence->getSignaledCount() == 1 ? "Sucess" : "Fail",
                           frame_no_,layer->release_fence->getName().c_str(),layer->release_fence->getSize(),layer->release_fence->getActiveCount(),
                           layer->release_fence->getSignaledCount(),layer->release_fence->getErrorCount(),
-                          layer->sLayerName_.c_str());
+                          layer->sLayerName_.c_str(),
+                          layer->uBufferId_,
+                          layer->release_fence->dump().c_str());
+    }
   }
   signal_ = true;
   return 0;

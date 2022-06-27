@@ -77,7 +77,8 @@ LOCAL_SHARED_LIBRARIES := \
   libutils \
   libsync_vendor \
   libtinyxml2 \
-  libbaseparameter
+  libbaseparameter \
+  librga
 
 LOCAL_STATIC_LIBRARIES := \
   libdrmhwcutils

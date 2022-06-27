@@ -24,6 +24,9 @@
 #include "vsyncworker.h"
 #include "rockchip/utils/drmdebug.h"
 #include "rockchip/drmgralloc.h"
+#include <im2d.hpp>
+#include <drm_fourcc.h>
+#include <rga.h>
 
 #include <inttypes.h>
 #include <string>
@@ -37,12 +40,6 @@
 #include <linux/fb.h>
 
 namespace android {
-
-#define fourcc_code(a, b, c, d) ((__u32)(a) | ((__u32)(b) << 8) | \
-             ((__u32)(c) << 16) | ((__u32)(d) << 24))
-
-#define DRM_FORMAT_ABGR8888	fourcc_code('A', 'B', '2', '4')
-#define DRM_FORMAT_NV12     fourcc_code('N', 'V', '1', '2') /* 2x2 subsampled Cr:Cb plane */
 
 #define ALOGD_HWC2_DRM_LAYER_INFO(log_level, drmHwcLayers) \
     if(LogLevel(log_level)){ \
@@ -102,7 +99,8 @@ DrmHwcTwo::DrmHwcTwo()
 
 HWC2::Error DrmHwcTwo::CreateDisplay(hwc2_display_t displ,
                                      HWC2::DisplayType type) {
-  HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,displ);
+  HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 " type=%s" , displ,
+                        (type == HWC2::DisplayType::Physical ? "Physical" : "Virtual"));
 
   DrmDevice *drm = resource_manager_->GetDrmDevice(displ);
   std::shared_ptr<Importer> importer = resource_manager_->GetImporter(displ);
@@ -113,6 +111,7 @@ HWC2::Error DrmHwcTwo::CreateDisplay(hwc2_display_t displ,
   displays_.emplace(std::piecewise_construct, std::forward_as_tuple(displ),
                     std::forward_as_tuple(resource_manager_, drm, importer,
                                           displ, type));
+
   displays_.at(displ).Init();
   return HWC2::Error::None;
 }
@@ -154,16 +153,53 @@ static inline void supported(char const *func) {
 HWC2::Error DrmHwcTwo::CreateVirtualDisplay(uint32_t width, uint32_t height,
                                             int32_t *format,
                                             hwc2_display_t *display) {
-  HWC2_ALOGD_IF_VERBOSE("w=%u,h=%u",width,height);
-  // TODO: Implement virtual display
-  return unsupported(__func__, width, height, format, display);
+  HWC2_ALOGD_IF_VERBOSE("w=%u,h=%u,f=%d",width,height,*format);
+  HWC2::Error ret = HWC2::Error::None;
+  int physical_display_num = resource_manager_->getDisplayCount();
+  int virtual_display_id = physical_display_num + mVirtualDisplayCount_;
+  if(!displays_.count(virtual_display_id)){
+    char value[PROPERTY_VALUE_MAX];
+    property_get("vendor.hwc.virtual_display_write_back_id", value, "0");
+    int write_back_id = atoi(value);
+    DrmDevice *drm = resource_manager_->GetDrmDevice(write_back_id);
+    std::shared_ptr<Importer> importer = resource_manager_->GetImporter(write_back_id);
+    if (!drm || !importer) {
+      ALOGE("Failed to get a valid drmresource and importer");
+      return HWC2::Error::NoResources;
+    }
+    displays_.emplace(std::piecewise_construct, std::forward_as_tuple(virtual_display_id),
+                      std::forward_as_tuple(resource_manager_, drm, importer,
+                                            virtual_display_id,
+                                            HWC2::DisplayType::Virtual));
+    displays_.at(virtual_display_id).InitVirtual();
+    *display = virtual_display_id;
+    *format = HAL_PIXEL_FORMAT_YCRCB_420_SP;
+    mVirtualDisplayCount_++;
+    resource_manager_->EnableWriteBackMode(write_back_id);
+    HWC2_ALOGI("Support VDS: w=%u,h=%u,f=%d display-id=%d",width,height,*format,virtual_display_id);
+    auto &display = resource_manager_->GetHwc2()->displays_.at(0);
+    display.InvalidateControl(60,-1);
+    return HWC2::Error::None;
+  }
+
+  return HWC2::Error::NoResources;
 }
 
 HWC2::Error DrmHwcTwo::DestroyVirtualDisplay(hwc2_display_t display) {
 
   HWC2_ALOGD_IF_VERBOSE();
-  // TODO: Implement virtual display
-  return unsupported(__func__, display);
+  auto virtual_display = displays_.find(display);
+  if(virtual_display != displays_.end()){
+	  displays_.erase(virtual_display);
+    resource_manager_->DisableWriteBackMode(resource_manager_->GetWBDisplay());
+    HWC2_ALOGI("VDS: display-id=%" PRIu64 , display);
+    mVirtualDisplayCount_--;
+    auto &display = resource_manager_->GetHwc2()->displays_.at(0);
+    display.InvalidateControl(60,0);
+    return HWC2::Error::None;
+  }
+
+  return HWC2::Error::BadDisplay;
 }
 
 void DrmHwcTwo::Dump(uint32_t *size, char *buffer) {
@@ -189,10 +225,10 @@ void DrmHwcTwo::Dump(uint32_t *size, char *buffer) {
 }
 
 uint32_t DrmHwcTwo::GetMaxVirtualDisplayCount() {
-  HWC2_ALOGD_IF_VERBOSE();
-  // TODO: Implement virtual display
-  unsupported(__func__);
-  return 0;
+  HWC2_ALOGI();
+  char value[PROPERTY_VALUE_MAX];
+  property_get("vendor.hwc.max_virtual_display_count", value, "5");
+  return atoi(value);
 }
 
 static bool isValid(HWC2::Callback descriptor) {
@@ -276,6 +312,7 @@ DrmHwcTwo::HwcDisplay::HwcDisplay(ResourceManager *resource_manager,
       handle_(handle),
       type_(type),
       client_layer_(UINT32_MAX,drm),
+      output_layer_(UINT32_MAX,drm),
       init_success_(false){
 }
 
@@ -393,6 +430,25 @@ HWC2::Error DrmHwcTwo::HwcDisplay::Init() {
   if(error != HWC2::Error::None){
     ALOGE("Failed to chose prefererd config for display %d (%d)", display, error);
     return error;
+  }
+
+  init_success_ = true;
+
+  return HWC2::Error::None;
+}
+
+
+HWC2::Error DrmHwcTwo::HwcDisplay::InitVirtual() {
+
+  HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 " type=%s",handle_,
+                        (type_ == HWC2::DisplayType::Physical ? "Physical" : "Virtual"));
+
+  int display = static_cast<int>(handle_);
+
+  connector_ = drm_->GetWritebackConnectorForDisplay(0);
+  if (!connector_) {
+    ALOGE("Failed to get connector for display %d", display);
+    return HWC2::Error::BadDisplay;
   }
 
   init_success_ = true;
@@ -1293,6 +1349,14 @@ int DrmHwcTwo::HwcDisplay::ImportBuffers() {
 
   return ret;
 }
+
+static inline long __currentTime()
+{
+struct timeval tp;
+gettimeofday(&tp, NULL);
+return static_cast<long>(tp.tv_sec) * 1000000 + tp.tv_usec;
+}
+
 HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition() {
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,handle_);
   int ret;
@@ -1355,10 +1419,266 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition() {
   return HWC2::Error::None;
 }
 
-HWC2::Error DrmHwcTwo::HwcDisplay::PresentDisplay(int32_t *retire_fence) {
+HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) {
   ATRACE_CALL();
 
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,handle_);
+
+  if(resource_manager_->isWBMode()){
+    std::shared_ptr<DrmBuffer> wbBuffer = resource_manager_->GetFinishWBBuffer();
+    if(wbBuffer != NULL){
+      const std::shared_ptr<HwcLayer::bufferInfo_t>
+        bufferinfo = output_layer_.GetBufferInfo();
+
+      // 每个目标的Buffer都需要初始化YUV数据
+      if(!mHasResetBufferId_.count(bufferinfo->uBufferId_)){
+        rga_buffer_t src;
+        rga_buffer_t dst;
+        rga_buffer_t pat;
+        im_rect src_rect;
+        im_rect dst_rect;
+        im_rect pat_rect;
+
+        std::shared_ptr<DrmBuffer> resetBuffer = resource_manager_->GetResetWBBuffer();
+
+        // Set src buffer info
+        src.fd      = resetBuffer->GetFd();
+        src.width   = resetBuffer->GetWidth();
+        src.height  = resetBuffer->GetHeight();
+        src.wstride = resetBuffer->GetStride();
+        src.hstride = resetBuffer->GetHeight();
+        src.format  = resetBuffer->GetFormat();
+
+        // Set src rect info
+        src_rect.x = 0;
+        src_rect.y = 0;
+        src_rect.width  = resetBuffer->GetWidth();
+        src_rect.height = resetBuffer->GetHeight();
+
+        // Set dst buffer info
+        dst.fd      = bufferinfo->iFd_;
+        dst.width   = bufferinfo->iWidth_;
+        dst.height  = bufferinfo->iHeight_;
+        dst.wstride = bufferinfo->iStride_;
+        dst.hstride = bufferinfo->iHeight_;
+        // 虚拟屏的格式通常为 HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED
+        // 由 Gralloc 决定具体格式，对应格式需要查询 uFourccFormat_ 才能确定
+        // 实际申请格式，由于RGA不支持Fourcc格式，所以垚做个转换。
+        switch (bufferinfo->uFourccFormat_) {
+          case DRM_FORMAT_BGR888:
+            dst.format = HAL_PIXEL_FORMAT_RGB_888;
+            break;
+          case DRM_FORMAT_ARGB8888:
+            dst.format = HAL_PIXEL_FORMAT_BGRA_8888;
+            break;
+          case DRM_FORMAT_XBGR8888:
+            dst.format = HAL_PIXEL_FORMAT_RGBX_8888;
+            break;
+          case DRM_FORMAT_ABGR8888:
+            dst.format = HAL_PIXEL_FORMAT_RGBA_8888;
+            break;
+          case DRM_FORMAT_ABGR2101010:
+            dst.format = HAL_PIXEL_FORMAT_RGBA_1010102;
+            break;
+          //Fix color error in NenaMark2 and Taiji
+          case DRM_FORMAT_BGR565:
+            dst.format = HAL_PIXEL_FORMAT_RGB_565;
+            break;
+          case DRM_FORMAT_YVU420:
+            dst.format = HAL_PIXEL_FORMAT_YV12;
+            break;
+          case DRM_FORMAT_NV12:
+            dst.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+            break;
+          case DRM_FORMAT_NV12_10:
+            dst.format = HAL_PIXEL_FORMAT_YCrCb_NV12_10;
+            break;
+          default:
+            ALOGE("Cannot convert uFourccFormat_=%c%c%c%c to hal format, use default format nv12.",
+                  bufferinfo->uFourccFormat_, bufferinfo->uFourccFormat_ >> 8,
+                  bufferinfo->uFourccFormat_ >> 16, bufferinfo->uFourccFormat_ >> 24);
+            dst.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+        }
+
+        dst_rect.x = 0;
+        dst_rect.y = 0;
+        dst_rect.width  = bufferinfo->iWidth_;
+        dst_rect.height = bufferinfo->iHeight_;
+
+        dst_rect.x = ALIGN_DOWN( dst_rect.x, 2);
+        dst_rect.y = ALIGN_DOWN( dst_rect.y, 2);
+        dst_rect.width  = ALIGN_DOWN( dst_rect.width, 2);
+        dst_rect.height = ALIGN_DOWN( dst_rect.height, 2);
+
+        // Set Dataspace
+        // if((srcBuffer.mBufferInfo_.uDataSpace_ & HAL_DATASPACE_STANDARD_BT709) == HAL_DATASPACE_STANDARD_BT709){
+        //   dst.color_space_mode = IM_YUV_TO_RGB_BT709_LIMIT;
+        //   SVEP_ALOGD_IF("color_space_mode = BT709 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
+        // }else{
+        //   SVEP_ALOGD_IF("color_space_mode = BT601 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
+        // }
+
+        IM_STATUS im_state;
+
+        // Call Im2d 格式转换
+        im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0);
+
+        if(im_state == IM_STATUS_SUCCESS){
+          HWC2_ALOGD_IF_DEBUG("call im2d reset Success");
+          mHasResetBufferId_.insert(bufferinfo->uBufferId_);
+        }else{
+          HWC2_ALOGD_IF_DEBUG("call im2d reset fail, ret=%d Error=%s", im_state, imStrError(im_state));
+        }
+      }
+
+
+      wbBuffer->WaitFinishFence();
+      // 添加调试接口，抓打印WriteBack Buffer
+      char value[PROPERTY_VALUE_MAX];
+      property_get("debug.wb.dump", value, "0");
+      if(atoi(value) > 0){
+        wbBuffer->DumpData();
+      }
+
+      rga_buffer_t src;
+      rga_buffer_t dst;
+      rga_buffer_t pat;
+      im_rect src_rect;
+      im_rect dst_rect;
+      im_rect pat_rect;
+
+      // Set src buffer info
+      src.fd      = wbBuffer->GetFd();
+      src.width   = wbBuffer->GetWidth();
+      src.height  = wbBuffer->GetHeight();
+      src.wstride = wbBuffer->GetStride();
+      src.hstride = wbBuffer->GetHeight();
+      src.format  = wbBuffer->GetFormat();
+
+      // 由于WriteBack仅支持BGR888(B:G:R little endian)，股需要使用RGA做格式转换
+      if(src.format == HAL_PIXEL_FORMAT_RGB_888)
+        src.format = RK_FORMAT_BGR_888;
+      // 由于WriteBack仅支持BGR565(B:G:R little endian)，股需要使用RGA做格式转换
+      if(src.format == HAL_PIXEL_FORMAT_RGB_565)
+        src.format = RK_FORMAT_BGR_565;
+
+
+      // Set src rect info
+      src_rect.x = 0;
+      src_rect.y = 0;
+      src_rect.width  = wbBuffer->GetWidth();
+      src_rect.height = wbBuffer->GetHeight();
+
+      // Set dst buffer info
+      dst.fd      = bufferinfo->iFd_;
+      dst.width   = bufferinfo->iWidth_;
+      dst.height  = bufferinfo->iHeight_;
+      dst.wstride = bufferinfo->iStride_;
+      dst.hstride = bufferinfo->iHeight_;
+      // 虚拟屏的格式通常为 HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED
+      // 由 Gralloc 决定具体格式，对应格式需要查询 uFourccFormat_ 才能确定
+      // 实际申请格式，由于RGA不支持Fourcc格式，所以垚做个转换。
+      switch (bufferinfo->uFourccFormat_) {
+        case DRM_FORMAT_BGR888:
+          dst.format = HAL_PIXEL_FORMAT_RGB_888;
+          break;
+        case DRM_FORMAT_ARGB8888:
+          dst.format = HAL_PIXEL_FORMAT_BGRA_8888;
+          break;
+        case DRM_FORMAT_XBGR8888:
+          dst.format = HAL_PIXEL_FORMAT_RGBX_8888;
+          break;
+        case DRM_FORMAT_ABGR8888:
+          dst.format = HAL_PIXEL_FORMAT_RGBA_8888;
+          break;
+        case DRM_FORMAT_ABGR2101010:
+          dst.format = HAL_PIXEL_FORMAT_RGBA_1010102;
+          break;
+        //Fix color error in NenaMark2 and Taiji
+        case DRM_FORMAT_BGR565:
+          dst.format = HAL_PIXEL_FORMAT_RGB_565;
+          break;
+        case DRM_FORMAT_YVU420:
+          dst.format = HAL_PIXEL_FORMAT_YV12;
+          break;
+        case DRM_FORMAT_NV12:
+          dst.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+          break;
+        case DRM_FORMAT_NV12_10:
+          dst.format = HAL_PIXEL_FORMAT_YCrCb_NV12_10;
+          break;
+        default:
+          ALOGE("Cannot convert uFourccFormat_=%c%c%c%c to hal format, use default format nv12.",
+                bufferinfo->uFourccFormat_, bufferinfo->uFourccFormat_ >> 8,
+                bufferinfo->uFourccFormat_ >> 16, bufferinfo->uFourccFormat_ >> 24);
+          dst.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+      }
+
+      // 为了确保录屏数据宽高比一致，故需要对目标的区域做修正
+      DrmMode wbMode = resource_manager_->GetWBMode();
+      if(wbMode.width()  != bufferinfo->iWidth_ ||
+         wbMode.height() != bufferinfo->iHeight_){
+        if((wbMode.width() * 1.0 / bufferinfo->iWidth_) >
+           (wbMode.height() * 1.0 /  bufferinfo->iHeight_)){
+          dst_rect.width = bufferinfo->iWidth_;
+          dst_rect.height = (int)(bufferinfo->iWidth_ * wbMode.height() / (wbMode.width() * 1.0));
+          dst_rect.x = 0;
+          dst_rect.y = (bufferinfo->iHeight_ - dst_rect.height) / 2;
+        }else{
+          dst_rect.width = (int)((bufferinfo->iHeight_) * wbMode.width() / (wbMode.height() * 1.0));
+          dst_rect.height = bufferinfo->iHeight_;
+          dst_rect.x = (bufferinfo->iWidth_ - dst_rect.width) / 2;
+          dst_rect.y = 0;
+        }
+      }else{
+        dst_rect.x = 0;
+        dst_rect.y = 0;
+        dst_rect.width  = bufferinfo->iWidth_;
+        dst_rect.height = bufferinfo->iHeight_;
+      }
+
+        dst_rect.x = ALIGN_DOWN( dst_rect.x, 2);
+        dst_rect.y = ALIGN_DOWN( dst_rect.y, 2);
+        dst_rect.width  = ALIGN_DOWN( dst_rect.width, 2);
+        dst_rect.height = ALIGN_DOWN( dst_rect.height, 2);
+
+      // Set Dataspace
+      // if((srcBuffer.mBufferInfo_.uDataSpace_ & HAL_DATASPACE_STANDARD_BT709) == HAL_DATASPACE_STANDARD_BT709){
+      //   dst.color_space_mode = IM_YUV_TO_RGB_BT709_LIMIT;
+      //   SVEP_ALOGD_IF("color_space_mode = BT709 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
+      // }else{
+      //   SVEP_ALOGD_IF("color_space_mode = BT601 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
+      // }
+
+      IM_STATUS im_state;
+
+      // Call Im2d 格式转换
+      im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0);
+
+      if(im_state == IM_STATUS_SUCCESS){
+        HWC2_ALOGD_IF_VERBOSE("call im2d convert to rgb888 Success");
+      }else{
+        HWC2_ALOGD_IF_DEBUG("call im2d fail, ret=%d Error=%s", im_state, imStrError(im_state));
+      }
+
+      // 添加调试接口，抓打印传递给SurfaceFlinger的Buffer
+      if(atoi(value) > 0){
+        output_layer_.DumpData();
+      }
+    }
+  }
+
+  ++frame_no_;
+  *retire_fence = -1;
+  return HWC2::Error::None;
+}
+HWC2::Error DrmHwcTwo::HwcDisplay::PresentDisplay(int32_t *retire_fence) {
+  ATRACE_CALL();
+
+  if(isVirtual()){
+    PresentVirtualDisplay(retire_fence);
+    return HWC2::Error::None;
+  }
 
   if(!init_success_){
     HWC2_ALOGE("init_success_=%d skip.",init_success_);
@@ -1399,12 +1719,13 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentDisplay(int32_t *retire_fence) {
     // The retire fence returned here is for the last frame, so return it and
     // promote the next retire fence
     *retire_fence = d_retire_fence_.get()->isValid() ? dup(d_retire_fence_.get()->getFd()) : -1;
-    if(LogLevel(DBG_DEBUG))
+    if(LogLevel(DBG_DEBUG)){
       HWC2_ALOGD_IF_DEBUG("Return RetireFence(%d) %s frame = %d Info: size=%d act=%d signal=%d err=%d",
                       d_retire_fence_.get()->isValid(),
                       d_retire_fence_.get()->getName().c_str(), frame_no_,
                       d_retire_fence_.get()->getSize(),d_retire_fence_.get()->getActiveCount(),
                       d_retire_fence_.get()->getSignaledCount(),d_retire_fence_.get()->getErrorCount());
+    }
   }
 
   ++frame_no_;
@@ -1527,7 +1848,27 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetOutputBuffer(buffer_handle_t buffer,
                                                    int32_t release_fence) {
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 ", buffer=%p, rel_fence=%d",handle_,buffer,release_fence);
   // TODO: Need virtual display support
-  return unsupported(__func__, buffer, release_fence);
+  output_layer_.set_output_buffer(buffer);
+  if(release_fence > 0){
+    /* release_fence will be close in this file hardware/interfaces/
+     *   graphics/composer/2.1/utils/passthrough/include/composer-passthrough/2.1/HwcHal.h+319
+     *       int32_t err = mDispatch.setOutputBuffer(mDevice, display, buffer, releaseFence);
+     *       // unlike in setClientTarget, releaseFence is owned by us
+     *       if (err == HWC2_ERROR_NONE && releaseFence >= 0) {
+     *           close(releaseFence);
+     *       }
+     */
+    int32_t new_release_fence = dup(release_fence);
+    String8 output;
+    output.appendFormat("%s-F%" PRIu32 "-Fd%d",__FUNCTION__,frame_no_,new_release_fence);
+    sp<ReleaseFence> release = sp<ReleaseFence>(new ReleaseFence(new_release_fence, output.c_str()));
+    output_layer_.set_release_fence(release);
+    HWC2_ALOGD_IF_DEBUG("Release=%d(%d) %s Info: size=%d act=%d signal=%d err=%d",
+                            release->getFd(),release->isValid(),release->getName().c_str(),
+                            release->getSize(), release->getActiveCount(),
+                            release->getSignaledCount(), release->getErrorCount());
+  }
+  return HWC2::Error::None;
 }
 
 HWC2::Error DrmHwcTwo::HwcDisplay::SyncPowerMode() {
@@ -1657,11 +1998,83 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetVsyncEnabled(int32_t enabled) {
   vsync_worker_.VSyncControl(HWC2_VSYNC_ENABLE == enabled);
   return HWC2::Error::None;
 }
+HWC2::Error DrmHwcTwo::HwcDisplay::ValidateVirtualDisplay(uint32_t *num_types,
+                                                          uint32_t *num_requests) {
+    if(LogLevel(DBG_INFO)){
+      DumpDisplayLayersInfo();
+    }
+    // 判断虚拟屏与主屏的Layer图层信息是否完全一致
+    // 完全一致即可使用WriteBack回写主屏屏幕数据作为虚拟屏显示数据
+    bool can_use_writeback = true;
 
+    if(resource_manager_->isWBMode()){
+      std::shared_ptr<DrmBuffer> wbBuffer = resource_manager_->GetFinishWBBuffer();
+      if(wbBuffer == NULL){
+        can_use_writeback = false;
+      }
+    }
+#if 0 // 目前发现部分双屏同显的display也存在图层数目不一致问题，所以无法通过图层判断.
+    // 检查图层数目
+    auto primary_display = resource_manager_->GetHwc2()->displays_.find(0);
+    if(primary_display != resource_manager_->GetHwc2()->displays_.end()){
+      if(primary_display->second.get_layers().size() != layers_.size()){
+        can_use_writeback = false;
+        HWC2_ALOGD_IF_DEBUG("Primary LayerSize(%zu) != Virtual LayerSize(%zu)",
+                            primary_display->second.get_layers().size(),
+                            layers_.size());
+      }else{  // LayerSize 相等，检查所有图层 LayerName 是否一致
+        for ( auto &primary_layers : primary_display->second.get_layers()){
+          DrmHwcTwo::HwcLayer &p_layer = primary_layers.second;
+          bool has_find = false;
+          for ( auto &l : layers_) {
+            DrmHwcTwo::HwcLayer &c_layer = l.second;
+            if(p_layer.GetBufferInfo() != NULL &&
+               c_layer.GetBufferInfo() != NULL &&
+               !strcmp(p_layer.GetBufferInfo()->sLayerName_.c_str(),
+                       c_layer.GetBufferInfo()->sLayerName_.c_str())){
+              has_find = true;
+              break;
+            }
+          }
+          if(!has_find){
+            can_use_writeback = false;
+            break;
+          }
+        }
+      }
+    }
+#endif
+
+    for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
+      DrmHwcTwo::HwcLayer &layer = l.second;
+      if(can_use_writeback){
+        layer.set_validated_type(HWC2::Composition::Device);
+        ALOGD_IF(LogLevel(DBG_INFO),"[%.4" PRIu64 "]=Device : %s",
+                                l.first,
+                                layer.GetBufferInfo()->sLayerName_.c_str());
+      }else{
+        layer.set_validated_type(HWC2::Composition::Client);
+        ALOGD_IF(LogLevel(DBG_INFO),"[%.4" PRIu64 "]=Client : %s",
+                                l.first,
+                                layer.GetBufferInfo()->sLayerName_.c_str());
+      }
+      ++*num_types;
+    }
+    *num_requests = 0;
+    return HWC2::Error::None;
+
+}
 HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
                                                    uint32_t *num_requests) {
   ATRACE_CALL();
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 ,handle_);
+
+  DumpDisplayLayersInfo();
+
+  // 虚拟屏
+  if(isVirtual()){
+    return ValidateVirtualDisplay(num_types, num_requests);
+  }
 
   if(!init_success_){
     HWC2_ALOGE("init_success_=%d skip.",init_success_);
@@ -1686,9 +2099,6 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
 
   HWC2::Error ret;
 
-  if(LogLevel(DBG_INFO)){
-    DumpDisplayLayersInfo();
-  }
 
   for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_)
     l.second.set_validated_type(HWC2::Composition::Client);
@@ -1740,7 +2150,9 @@ HWC2::Error DrmHwcTwo::HwcLayer::SetCursorPosition(int32_t x, int32_t y) {
 int DrmHwcTwo::HwcDisplay::DumpDisplayInfo(String8 &output){
 
   output.appendFormat(" DisplayId=%" PRIu64 ", Connector %u, Type = %s-%u, Connector state = %s\n",handle_,
-                        connector_->id(),drm_->connector_type_str(connector_->type()),connector_->type_id(),
+                        connector_->id(),
+                        isVirtual() ? "Virtual" : drm_->connector_type_str(connector_->type()),
+                        connector_->type_id(),
                         connector_->state() == DRM_MODE_CONNECTED ? "DRM_MODE_CONNECTED" : "DRM_MODE_DISCONNECTED");
 
   if(connector_->state() != DRM_MODE_CONNECTED)
@@ -1793,7 +2205,9 @@ int DrmHwcTwo::HwcDisplay::DumpDisplayInfo(String8 &output){
 int DrmHwcTwo::HwcDisplay::DumpDisplayLayersInfo(String8 &output){
 
   output.appendFormat(" DisplayId=%" PRIu64 ", Connector %u, Type = %s-%u, Connector state = %s , frame_no = %d\n",handle_,
-                        connector_->id(),drm_->connector_type_str(connector_->type()),connector_->type_id(),
+                        connector_->id(),
+                        isVirtual() ? "Virtual" : drm_->connector_type_str(connector_->type()),
+                        connector_->type_id(),
                         connector_->state() == DRM_MODE_CONNECTED ? "DRM_MODE_CONNECTED" : "DRM_MODE_DISCONNECTED",
                         frame_no_);
 
@@ -1817,7 +2231,9 @@ int DrmHwcTwo::HwcDisplay::DumpDisplayLayersInfo(String8 &output){
 int DrmHwcTwo::HwcDisplay::DumpDisplayLayersInfo(){
   String8 output;
   output.appendFormat(" DisplayId=%" PRIu64 ", Connector %u, Type = %s-%u, Connector state = %s , frame_no = %d\n",handle_,
-                        connector_->id(),drm_->connector_type_str(connector_->type()),connector_->type_id(),
+                        connector_->id(),
+                        isVirtual() ? "Virtual" : drm_->connector_type_str(connector_->type()),
+                        connector_->type_id(),
                         connector_->state() == DRM_MODE_CONNECTED ? "DRM_MODE_CONNECTED" : "DRM_MODE_DISCONNECTED",
                         frame_no_);
 
@@ -2101,8 +2517,6 @@ int DrmHwcTwo::HwcDisplay::SelfRefreshEnable(){
   }
   if(enable_self_refresh){
     InvalidateControl(10,-1);
-  }else{
-    InvalidateControl(0,0);
   }
   return 0 ;
 }
@@ -2593,6 +3007,7 @@ int DrmHwcTwo::HwcLayer::DoSvep(bool validate, DrmHwcLayer *drmHwcLayer){
         dst_buffer = bufferQueue_->DequeueDrmBuffer(require.mBufferInfo_.iWidth_,
                                                     require.mBufferInfo_.iHeight_,
                                                     require.mBufferInfo_.iFormat_,
+                                                    RK_GRALLOC_USAGE_STRIDE_ALIGN_64,
                                                     "FB-target-transform");
 
         if(dst_buffer == NULL){
@@ -2694,12 +3109,13 @@ int DrmHwcTwo::HwcLayer::DoSvep(bool validate, DrmHwcLayer *drmHwcLayer){
 
 void DrmHwcTwo::HwcLayer::DumpLayerInfo(String8 &output) {
 
-  output.appendFormat( " %04" PRIu32 " | %03" PRIu32 " | %9s | %9s | %-18.18" PRIxPTR " | %-11.11s | %-10.10s |%7.1f,%7.1f,%7.1f,%7.1f |%5d,%5d,%5d,%5d | %10x | %s\n",
+  output.appendFormat( " %04" PRIu32 " | %03" PRIu32 " | %9s | %9s | %-18.18" PRIxPTR " | %-11.11s | %-10.10s |%7.1f,%7.1f,%7.1f,%7.1f |%5d,%5d,%5d,%5d | %10x | %s | 0x%" PRIx64 "\n",
                     id_,z_order_,to_string(sf_type_).c_str(),to_string(validated_type_).c_str(),
                     intptr_t(buffer_), to_string(transform_).c_str(), to_string(blending_).c_str(),
                     source_crop_.left, source_crop_.top, source_crop_.right, source_crop_.bottom,
                     display_frame_.left, display_frame_.top, display_frame_.right, display_frame_.bottom,
-                    dataspace_,layer_name_.c_str());
+                    dataspace_,layer_name_.c_str(),
+                    pBufferInfo_ != NULL ? pBufferInfo_->uBufferId_ : -1);
   return;
 }
 int DrmHwcTwo::HwcLayer::DumpData() {
@@ -2744,7 +3160,6 @@ int DrmHwcTwo::HwcLayer::DumpData() {
       ALOGD(" dump surface layer_id=%d ,data_name %s,w:%d,h:%d,stride :%d,size=%d,cpu_addr=%p",
           id_,data_name,width,height,byte_stride,size,cpu_addr);
   }
-
 
   ret = drmGralloc_->hwc_get_handle_unlock(buffer_);
   if(ret){

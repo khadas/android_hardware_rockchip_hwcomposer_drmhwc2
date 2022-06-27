@@ -94,6 +94,7 @@ public:
   int freeBuffer(buffer_handle_t handle);
 
   void set_drm_version(int drm_device, int version);
+  int get_drm_device() const { return drmDeviceFd_; };
   int hwc_get_handle_width(buffer_handle_t hnd);
   int hwc_get_handle_height(buffer_handle_t hnd);
   int hwc_get_handle_format(buffer_handle_t hnd);

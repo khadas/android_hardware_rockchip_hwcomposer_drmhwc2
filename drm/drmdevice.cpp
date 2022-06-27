@@ -518,9 +518,9 @@ std::tuple<int, int> DrmDevice::Init(const char *path, int num_displays) {
     }
     conn->UpdateModes();
 
-    if (conn->writeback())
+    if (conn->writeback()){
       writeback_connectors_.emplace_back(std::move(conn));
-    else
+    }else
       connectors_.emplace_back(std::move(conn));
   }
 
@@ -767,7 +767,6 @@ DrmConnector *DrmDevice::GetConnectorForDisplay(int display) const {
 
 DrmConnector *DrmDevice::GetWritebackConnectorForDisplay(int display) const {
   for (auto &conn : writeback_connectors_) {
-    if (conn->display() == display)
       return conn.get();
   }
   return NULL;

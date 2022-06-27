@@ -32,7 +32,7 @@ public:
   std::shared_ptr<DrmBuffer> FrontDrmBuffer();
   std::shared_ptr<DrmBuffer> BackDrmBuffer();
 
-  std::shared_ptr<DrmBuffer> DequeueDrmBuffer(int w, int h, int format, std::string name);
+  std::shared_ptr<DrmBuffer> DequeueDrmBuffer(int w, int h, int format, uint64_t usage, std::string name);
   int QueueBuffer(const std::shared_ptr<DrmBuffer> buffer);
 
 private:

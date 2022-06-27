@@ -1352,9 +1352,10 @@ int Vop3588::TrySvepPolicy(
 
           // 4. Alloc dst_buffer
             dst_buffer = bufferQueue_->DequeueDrmBuffer(require.mBufferInfo_.iWidth_,
-                                                            require.mBufferInfo_.iHeight_,
-                                                            require.mBufferInfo_.iFormat_,
-                                                           "SVEP-SurfaceView");
+                                                        require.mBufferInfo_.iHeight_,
+                                                        require.mBufferInfo_.iFormat_,
+                                                        RK_GRALLOC_USAGE_STRIDE_ALIGN_64,
+                                                        "SVEP-SurfaceView");
 
           if(dst_buffer == NULL){
             HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");

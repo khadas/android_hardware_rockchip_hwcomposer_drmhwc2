@@ -26,7 +26,7 @@ namespace android {
 
 class DrmBuffer{
 public:
-  DrmBuffer(int w, int h, int format, std::string sName_);
+  DrmBuffer(int w, int h, int format, uint64_t usage = 0, std::string sName_ = "unset");
   ~DrmBuffer();
   int Init();
   bool initCheck();
@@ -45,6 +45,8 @@ public:
   uint64_t GetModifier();
   uint64_t GetBufferId();
   uint32_t GetGemHandle();
+  uint32_t DrmFormatToPlaneNum(uint32_t drm_format);
+  uint32_t GetFbId();
   void* Lock();
   int Unlock();
   UniqueFd GetFinishFence();
@@ -70,6 +72,7 @@ private:
   uint64_t uModifier_;
   uint64_t uBufferId_;
   uint32_t uGemHandle_;
+  uint32_t uFbId_;
   // Fence info
   UniqueFd iFinishFence_;
   UniqueFd iReleaseFence_;

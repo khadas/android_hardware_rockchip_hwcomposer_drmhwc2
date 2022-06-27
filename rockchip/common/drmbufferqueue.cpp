@@ -71,13 +71,13 @@ std::shared_ptr<DrmBuffer> DrmBufferQueue::BackDrmBuffer(){
   return NULL;
 }
 
-std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w, int h, int format, std::string name){
-  HWC2_ALOGD_IF_DEBUG("w=%d, h=%d, format=%d name=%s",w, h, format, name.c_str());
+std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w, int h, int format, uint64_t usage, std::string name){
+  HWC2_ALOGD_IF_DEBUG("w=%d, h=%d, format=%d usage=0x%" PRIu64 " name=%s",w, h, format, usage, name.c_str());
   if(bufferQueue_.size() == iMaxBufferSize_){
     currentBuffer_ = bufferQueue_.front();
     bufferQueue_.pop();
     if(NeedsReallocation(w, h, format)){
-      currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, name);
+      currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, usage, name);
       if(currentBuffer_->Init()){
         HWC2_ALOGE("DrmBuffer Init fail, w=%d h=%d format=%d name=%s",
                    w, h, format, name.c_str());
@@ -92,7 +92,7 @@ std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w, int h, int fo
       currentBuffer_->GetId(),currentBuffer_->GetFd(),currentBuffer_.get(),bufferQueue_.size());
     return currentBuffer_;
   }else{
-    currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, name);
+    currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, usage, name);
     if(currentBuffer_->Init()){
       HWC2_ALOGE("DrmBuffer Init fail, w=%d h=%d format=%d name=%s",
                  w, h, format, name.c_str());

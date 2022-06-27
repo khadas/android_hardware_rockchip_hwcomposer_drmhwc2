@@ -33,6 +33,7 @@
 #include <hardware/hwcomposer2.h>
 
 #include <map>
+#include <atomic>
 
 namespace android {
 
@@ -199,8 +200,17 @@ class DrmHwcTwo : public hwc2_device_t {
           pBufferInfo_->uModifier_ = drmGralloc_->hwc_get_handle_format_modifier(buffer_);
           drmGralloc_->hwc_get_handle_name(buffer_,pBufferInfo_->sLayerName_);
           layer_name_ = pBufferInfo_->sLayerName_;
-          HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ size = %zu insert success! BufferId=%" PRIx64 " Name=%s",
-                               bufferInfoMap_.size(),buffer_id,pBufferInfo_->sLayerName_.c_str());
+          HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ size = %zu insert success! BufferId=%" PRIx64
+                                "w=%d h=%d format=%d fourcc=%c%c%c%c Name=%s",
+                               bufferInfoMap_.size(),buffer_id,
+                               pBufferInfo_->iWidth_,
+                               pBufferInfo_->iHeight_,
+                               pBufferInfo_->iFormat_,
+                               pBufferInfo_->uFourccFormat_,
+                               pBufferInfo_->uFourccFormat_ >> 8,
+                               pBufferInfo_->uFourccFormat_ >> 16,
+                               pBufferInfo_->uFourccFormat_ >> 24,
+                               pBufferInfo_->sLayerName_.c_str());
         }
       }else{
         bHasCache_ = true;
@@ -208,6 +218,40 @@ class DrmHwcTwo : public hwc2_device_t {
         HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ size = %zu has cache! BufferId=%" PRIx64 " Name=%s",
                              bufferInfoMap_.size(),buffer_id,pBufferInfo_->sLayerName_.c_str());
       }
+    }
+
+    void set_output_buffer(buffer_handle_t buffer) {
+      buffer_ = buffer;
+
+      // Bufferinfo Cache
+      uint64_t buffer_id;
+      drmGralloc_->hwc_get_handle_buffer_id(buffer_, &buffer_id);
+      pBufferInfo_ = std::make_shared<bufferInfo_t>(bufferInfo());
+      pBufferInfo_->uBufferId_ = buffer_id;
+      pBufferInfo_->iFd_     = drmGralloc_->hwc_get_handle_primefd(buffer_);
+      pBufferInfo_->iWidth_  = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_WIDTH);
+      pBufferInfo_->iHeight_ = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_HEIGHT);
+      pBufferInfo_->iStride_ = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_STRIDE);
+      pBufferInfo_->iSize_   = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_SIZE);
+      pBufferInfo_->iByteStride_ = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_BYTE_STRIDE_WORKROUND);
+      pBufferInfo_->iFormat_ = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_FORMAT);
+      pBufferInfo_->iUsage_   = drmGralloc_->hwc_get_handle_usage(buffer_);
+      pBufferInfo_->uFourccFormat_ = drmGralloc_->hwc_get_handle_fourcc_format(buffer_);
+      pBufferInfo_->uModifier_ = drmGralloc_->hwc_get_handle_format_modifier(buffer_);
+      drmGralloc_->hwc_get_handle_name(buffer_,pBufferInfo_->sLayerName_);
+      layer_name_ = pBufferInfo_->sLayerName_;
+      HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ size = %zu insert success! BufferId=%" PRIx64
+                            " fd=%d w=%d h=%d format=%d fourcc=%c%c%c%c Name=%s",
+                            bufferInfoMap_.size(),buffer_id,
+                            pBufferInfo_->iFd_,
+                            pBufferInfo_->iWidth_,
+                            pBufferInfo_->iHeight_,
+                            pBufferInfo_->iFormat_,
+                            pBufferInfo_->uFourccFormat_,
+                            pBufferInfo_->uFourccFormat_ >> 8,
+                            pBufferInfo_->uFourccFormat_ >> 16,
+                            pBufferInfo_->uFourccFormat_ >> 24,
+                            pBufferInfo_->sLayerName_.c_str());
     }
 
     int initOrGetGemhanleFromCache(DrmHwcLayer* drmHwcLayer) {
@@ -324,6 +368,7 @@ class DrmHwcTwo : public hwc2_device_t {
                     uint32_t frame_no,
                     bool validate);
 
+    const std::shared_ptr<bufferInfo_t> GetBufferInfo() { return pBufferInfo_;};
     void DumpLayerInfo(String8 &output);
 
     int DumpData();
@@ -407,6 +452,9 @@ class DrmHwcTwo : public hwc2_device_t {
                HWC2::DisplayType type);
     HwcDisplay(const HwcDisplay &) = delete;
     HWC2::Error Init();
+
+    HWC2::Error InitVirtual();
+
     HWC2::Error CheckStateAndReinit();
 
     HWC2::Error RegisterVsyncCallback(hwc2_callback_data_t data,
@@ -450,6 +498,7 @@ class DrmHwcTwo : public hwc2_device_t {
                                    float *min_luminance);
     HWC2::Error GetReleaseFences(uint32_t *num_elements, hwc2_layer_t *layers,
                                  int32_t *fences);
+    HWC2::Error PresentVirtualDisplay(int32_t *retire_fence);
     HWC2::Error PresentDisplay(int32_t *retire_fence);
     HWC2::Error SetActiveConfig(hwc2_config_t config);
     HWC2::Error ChosePreferredConfig();
@@ -462,6 +511,8 @@ class DrmHwcTwo : public hwc2_device_t {
     HWC2::Error SyncPowerMode();
     HWC2::Error SetVsyncEnabled(int32_t enabled);
     HWC2::Error ValidateDisplay(uint32_t *num_types, uint32_t *num_requests);
+    HWC2::Error ValidateVirtualDisplay(uint32_t *num_types, uint32_t *num_requests);
+
     std::map<hwc2_layer_t, HwcLayer> &get_layers(){
         return layers_;
     }
@@ -491,6 +542,7 @@ class DrmHwcTwo : public hwc2_device_t {
    int SelfRefreshEnable();
    int EntreStaticScreen(uint64_t refresh, int refresh_cnt);
    int InvalidateControl(uint64_t refresh, int refresh_cnt);
+   int isVirtual() { return type_ == HWC2::DisplayType::Virtual;}
 
    private:
     HWC2::Error ValidatePlanes();
@@ -521,6 +573,10 @@ class DrmHwcTwo : public hwc2_device_t {
     uint32_t layer_idx_ = 1;
     std::map<hwc2_layer_t, HwcLayer> layers_;
     HwcLayer client_layer_;
+    // WriteBack 需要使用
+    HwcLayer output_layer_;
+    std::set<uint64_t> mHasResetBufferId_;
+
     int32_t color_mode_;
     bool init_success_;
     bool validate_success_;
@@ -627,6 +683,7 @@ class DrmHwcTwo : public hwc2_device_t {
   std::map<hwc2_display_t, HwcDisplay> displays_;
   std::map<HWC2::Callback, HwcCallback> callbacks_;
   std::string mDumpString;
+  std::atomic<int> mVirtualDisplayCount_;
 };
 }  // namespace android
 #endif // DRM_HWC_TWO_H

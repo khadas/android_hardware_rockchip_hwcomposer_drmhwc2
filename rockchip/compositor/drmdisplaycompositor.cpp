@@ -379,19 +379,27 @@ int DrmDisplayCompositor::SetupWritebackCommit(drmModeAtomicReqPtr pset,
                                                uint32_t crtc_id,
                                                DrmConnector *writeback_conn,
                                                DrmHwcBuffer *writeback_buffer) {
+
   int ret = 0;
   if (writeback_conn->writeback_fb_id().id() == 0 ||
       writeback_conn->writeback_out_fence().id() == 0) {
     ALOGE("Writeback properties don't exit");
     return -EINVAL;
   }
-  if ((*writeback_buffer)->fb_id == 0) {
-    ALOGE("Invalid writeback buffer");
-    return -EINVAL;
+  ret = resource_manager_->UpdateWriteBackResolution(display_);
+  if(ret){
+    HWC2_ALOGE("UpdateWriteBackResolution fail.");
+    return -1;
   }
+  std::shared_ptr<DrmBuffer> wbBuffer = resource_manager_->GetNextWBBuffer();
+  if(!wbBuffer->initCheck()){
+    HWC2_ALOGE("wbBuffer init fail.");
+    return -1;
+  }
+
   ret = drmModeAtomicAddProperty(pset, writeback_conn->id(),
                                  writeback_conn->writeback_fb_id().id(),
-                                 (*writeback_buffer)->fb_id);
+                                 wbBuffer->GetFbId());
   if (ret < 0) {
     ALOGE("Failed to add writeback_fb_id");
     return ret;
@@ -665,16 +673,18 @@ int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
     return -ENODEV;
   }
 
-  if (writeback_buffer != NULL) {
-    if (writeback_conn == NULL) {
-      ALOGE("Invalid arguments requested writeback without writeback conn");
-      return -EINVAL;
-    }
-    ret = SetupWritebackCommit(pset, crtc->id(), writeback_conn,
-                               writeback_buffer);
-    if (ret < 0) {
-      ALOGE("Failed to Setup Writeback Commit ret = %d", ret);
-      return ret;
+  // WriteBack Mode
+  if(!test_only && resource_manager_->isWBMode()){
+    int wbDisplay = resource_manager_->GetWBDisplay();
+    if(wbDisplay == display_){
+      ret = SetupWritebackCommit(pset,
+                                 crtc->id(),
+                                 drm->GetWritebackConnectorForDisplay(wbDisplay),
+                                 NULL);
+      if (ret < 0) {
+        ALOGE("Failed to Setup Writeback Commit ret = %d", ret);
+        return ret;
+      }
     }
   }
 
@@ -1033,6 +1043,23 @@ void DrmDisplayCompositor::Commit() {
     pset_=NULL;
   }else{
     GetTimestamp();
+  }
+
+  // WriteBack Fence handle.
+  if(writeback_fence_ > 0){
+    if(resource_manager_->isWBMode()){
+      int wbDisplay = resource_manager_->GetWBDisplay();
+      if(wbDisplay == display_){
+        std::shared_ptr<DrmBuffer> wbBuffer = resource_manager_->GetNextWBBuffer();
+        wbBuffer->SetFinishFence(writeback_fence_);
+        writeback_fence_ = -1;
+        resource_manager_->SwapWBBuffer();
+      }
+    }else{
+      close(writeback_fence_);
+      writeback_fence_ = -1;
+    }
+
   }
 
   if (pset_){
@@ -1924,7 +1951,6 @@ int DrmDisplayCompositor::FlattenActiveComposition() {
     ALOGV("No writeback connector available");
     return -EINVAL;
   }
-
 
   if (writeback_conn->display() != display_) {
     return FlattenConcurrent(writeback_conn);
