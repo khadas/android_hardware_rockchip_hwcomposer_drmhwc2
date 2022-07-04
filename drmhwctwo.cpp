@@ -1988,11 +1988,18 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
   for(auto &drmHwcLayer : drm_hwc_layers_){
     if(drmHwcLayer.bHdr_){
       exist_hdr_layer = true;
+      int src_w = (int)(drmHwcLayer.source_crop.right - drmHwcLayer.source_crop.left);
+      int src_h = (int)(drmHwcLayer.source_crop.bottom - drmHwcLayer.source_crop.top);
+      int src_area_size = src_w * src_h;
       int dis_w = drmHwcLayer.display_frame.right - drmHwcLayer.display_frame.left;
       int dis_h = drmHwcLayer.display_frame.bottom - drmHwcLayer.display_frame.top;
       int dis_area_size = dis_w * dis_h;
+      // 视频缩小倍数*10，*10的原因是 vendor.hwc.hdr_video_area 为整型，不支持浮点数
+      hdr_area_ratio = dis_area_size * 10 / src_area_size;
       int screen_size = ctx_.rel_xres * ctx_.rel_yres;
-      hdr_area_ratio = dis_area_size * 10 / screen_size;
+      // 视频占屏幕面积*10，取缩小倍数与视频占用屏幕面积较小值
+      if(hdr_area_ratio > (dis_area_size * 10 / screen_size))
+        hdr_area_ratio = dis_area_size * 10 / screen_size;
     }
   }
   if(exist_hdr_layer){
@@ -2008,7 +2015,7 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
       return 0;
     }
 
-    property_get("vendor.hwc.hdr_video_area", value, "10");
+    property_get("vendor.hwc.hdr_video_area", value, "6");
     if(atoi(value) > hdr_area_ratio){
       if(ctx_.hdr_mode && !connector_->switch_hdmi_hdr_mode(HAL_DATASPACE_UNKNOWN)){
         ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
