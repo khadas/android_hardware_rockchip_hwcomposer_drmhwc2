@@ -964,7 +964,6 @@ int DrmConnector::switch_hdmi_hdr_mode(android_dataspace_t input_colorspace){
                 colorspace = DrmColorspaceType::BT2020_RGB;
               else
                 colorspace = DrmColorspaceType::BT2020_YCC;
-
           }
 
           if(colorspace_ != colorspace){

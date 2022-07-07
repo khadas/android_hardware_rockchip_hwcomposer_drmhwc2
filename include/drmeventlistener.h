@@ -32,6 +32,7 @@ class DrmEventHandler {
   }
 
   virtual void HandleEvent(uint64_t timestamp_us) = 0;
+  virtual void HandleResolutionSwitchEvent(int display_id) = 0;
 };
 
 class DrmEventListener : public Worker {
@@ -46,6 +47,7 @@ class DrmEventListener : public Worker {
 
   static void FlipHandler(int fd, unsigned int sequence, unsigned int tv_sec,
                           unsigned int tv_usec, void *user_data);
+  void FlipResolutionSwitchHandler(int display_id);
 
  protected:
   virtual void Routine();

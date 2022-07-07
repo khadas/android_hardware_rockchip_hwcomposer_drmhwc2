@@ -700,6 +700,7 @@ class DrmHwcTwo : public hwc2_device_t {
         : hwc2_(hwc2), drm_(drm) {
     }
     void HandleEvent(uint64_t timestamp_us);
+    void HandleResolutionSwitchEvent(int display_id);
 
    private:
     DrmHwcTwo *hwc2_;

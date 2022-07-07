@@ -1239,6 +1239,8 @@ int DrmDevice::UpdateDisplayMode(int display_id){
   hotplug_timeline++;
 
   pthread_mutex_unlock(&diplay_route_mutex);
+
+  FlipResolutionSwitchHandler(display_id);
   return 0;
 }
 

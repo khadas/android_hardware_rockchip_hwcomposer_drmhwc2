@@ -78,6 +78,11 @@ void DrmEventListener::FlipHandler(int /* fd */, unsigned int /* sequence */,
   delete handler;
 }
 
+void DrmEventListener::FlipResolutionSwitchHandler(int display_id) {
+  hotplug_handler_->HandleResolutionSwitchEvent(display_id);
+  return;
+}
+
 void DrmEventListener::UEventHandler() {
   char buffer[1024];
   int ret;

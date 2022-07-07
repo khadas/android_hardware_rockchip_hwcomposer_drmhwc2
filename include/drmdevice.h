@@ -102,6 +102,9 @@ class DrmDevice {
   void RegisterHotplugHandler(DrmEventHandler *handler) {
     event_listener_.RegisterHotplugHandler(handler);
   }
+  void FlipResolutionSwitchHandler(int display_id) {
+    event_listener_.FlipResolutionSwitchHandler(display_id);
+  }
 
   // RK support
   type_name_define(encoder_type);

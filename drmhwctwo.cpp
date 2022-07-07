@@ -975,6 +975,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::GetDisplayConfigs(uint32_t *num_configs,
       ctx_.rel_yres = best_mode.v_display();
     }
 
+    ctx_.vrefresh = best_mode.v_refresh();
     // AFBC limit
     bool disable_afbdc = false;
     if(handle_ == HWC_DISPLAY_PRIMARY){
@@ -3234,7 +3235,7 @@ void DrmHwcTwo::HandleDisplayHotplug(hwc2_display_t displayid, int state) {
       return;
   }
 
-  if(displayid == HWC_DISPLAY_PRIMARY)
+  if(displayid == HWC_DISPLAY_PRIMARY && state == HWC2_CONNECTION_DISCONNECTED)
     return;
 
   auto hotplug = reinterpret_cast<HWC2_PFN_HOTPLUG>(cb->second.func);
@@ -3286,6 +3287,7 @@ void DrmHwcTwo::HandleInitialHotplugState(DrmDevice *drmDevice) {
 
 void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
   int32_t ret = 0;
+  bool primary_change = true;
   for (auto &conn : drm_->connectors()) {
     drmModeConnection old_state = conn->state();
     conn->ResetModesReady();
@@ -3302,6 +3304,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
           conn->id(),drm_->connector_type_str(conn->type()),conn->type_id());
 
     int display_id = conn->display();
+    primary_change = (display_id == 0);
     auto &display = hwc2_->displays_.at(display_id);
     if (cur_state == DRM_MODE_CONNECTED) {
       ret |= (int32_t)display.HoplugEventTmeline();
@@ -3386,8 +3389,48 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
   auto &display = hwc2_->displays_.at(0);
   display.InvalidateControl(5,20);
 
+  if(primary_change){
+    for (auto &conn : drm_->connectors()) {
+      int display_id = conn->display();
+      drmModeConnection state = conn->state();
+      if (display_id != 0 && state == DRM_MODE_CONNECTED) {
+        hwc2_->HandleDisplayHotplug(display_id, state);
+      }
+    }
+  }
   return;
 }
+
+void DrmHwcTwo::DrmHotplugHandler::HandleResolutionSwitchEvent(int display_id) {
+  DrmConnector *connector = drm_->GetConnectorForDisplay(display_id);
+  if (!connector) {
+    ALOGE("Failed to get connector for display %d", display_id);
+    return;
+  }
+
+  auto &display = hwc2_->displays_.at(display_id);
+  display.ChosePreferredConfig();
+  ALOGI("hwc_resolution_switch: connector %u type=%s, type_id=%d\n",
+                connector->id(),
+                drm_->connector_type_str(connector->type()),
+                connector->type_id());
+  hwc2_->HandleDisplayHotplug(display_id, DRM_MODE_CONNECTED);
+
+  auto &primary = hwc2_->displays_.at(0);
+  primary.InvalidateControl(5,20);
+
+  if(display_id == 0){
+    for (auto &conn : drm_->connectors()) {
+      int display_id = conn->display();
+      drmModeConnection state = conn->state();
+      if (display_id != 0 && state == DRM_MODE_CONNECTED) {
+        hwc2_->HandleDisplayHotplug(display_id, state);
+      }
+    }
+  }
+  return;
+}
+
 
 // static
 int DrmHwcTwo::HookDevClose(hw_device_t * /*dev*/) {
