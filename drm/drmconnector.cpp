@@ -633,7 +633,7 @@ int DrmConnector::UpdateBCSH(int display_id, int update_base_timeline){
   return 0;
 }
 
-bool DrmConnector::ParseHdmiOutputFormat(char* strprop, output_format *format, output_depth *depth) {
+bool DrmConnector::ParseHdmiOutputFormat(char* strprop, int *format, int *depth) {
     if (!strcmp(strprop, "Auto")) {
         *format = output_ycbcr_high_subsampling;
         *depth = Automatic;
@@ -698,8 +698,8 @@ int DrmConnector::UpdateOutputFormat(int display_id, int update_base_timeline){
 
   int ret = 0;
   bool update = false;
-  output_format    color_format = output_rgb;
-  output_depth color_depth = depth_24bit;
+  int color_format = -1;
+  int color_depth = -1;
   bool need_change_format = false,need_change_depth = false;
   bool exist_suitable_property = false;
   char output_format_pro[PROPERTY_VALUE_MAX]={0};
@@ -744,12 +744,12 @@ int DrmConnector::UpdateOutputFormat(int display_id, int update_base_timeline){
   }
 
 
-  if(uColorFormat_ != color_format) {
+  if(color_format != -1 && uColorFormat_ != color_format) {
     update = true;
     need_change_format = true;
   }
 
-  if(uColorDepth_ != color_depth) {
+  if(color_depth != -1 && uColorDepth_ != color_depth) {
     update = true;
     need_change_depth = true;
   }

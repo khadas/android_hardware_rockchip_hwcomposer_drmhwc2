@@ -68,7 +68,7 @@ class DrmConnector {
   int UpdateOutputFormat(int display_id, int update_base_timeline);
   int UpdateOverscan(int display_id, char *overscan_value);
   int SetDisplayModeInfo(int display_id);
-  bool ParseHdmiOutputFormat(char* strprop, output_format *format, output_depth *depth);
+  bool ParseHdmiOutputFormat(char* strprop, int *format, int *depth);
   void ResetModesReady(){ bModeReady_ = false;};
   bool ModesReady(){ return bModeReady_;};
 
@@ -211,8 +211,8 @@ class DrmConnector {
   uint32_t uSaturation_=50;
   uint32_t uHue_=50;
   // output format
-  output_format    uColorFormat_ = output_rgb;
-  output_depth uColorDepth_ = depth_24bit;
+  int uColorFormat_ = -1;
+  int uColorDepth_ = -1;
   // Spilt mode
   bool bSpiltMode_=false;
   // Horizontal mode
