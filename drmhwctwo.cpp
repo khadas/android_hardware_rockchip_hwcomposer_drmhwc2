@@ -507,7 +507,10 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit() {
     for(auto &map_layer : layers_){
       map_layer.second.clear();
     }
-
+    // Bug: #359894
+    // layers_ not clear may cause error log:
+    // "E hwc-platform-drm-generic: ImportBuffer fail fd=7,w=-1,h=-1,bo->format=AB24 ..."
+    layers_.clear();
     // Clear Client Target Layer
     client_layer_.clear();
   }
