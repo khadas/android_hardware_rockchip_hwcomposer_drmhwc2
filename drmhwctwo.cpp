@@ -2423,7 +2423,7 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
   }
   if(exist_hdr_layer){
     char value[PROPERTY_VALUE_MAX];
-    property_get("vendor.hwc.hdr_force_disable", value, "0");
+    property_get("persist.vendor.hwc.hdr_force_disable", value, "0");
     if(atoi(value) > 0){
       if(ctx_.hdr_mode && !connector_->switch_hdmi_hdr_mode(HAL_DATASPACE_UNKNOWN)){
         ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
@@ -2434,7 +2434,7 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
       return 0;
     }
 
-    property_get("vendor.hwc.hdr_video_area", value, "6");
+    property_get("persist.vendor.hwc.hdr_video_area", value, "6");
     if(atoi(value) > hdr_area_ratio){
       if(ctx_.hdr_mode && !connector_->switch_hdmi_hdr_mode(HAL_DATASPACE_UNKNOWN)){
         ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
