@@ -70,92 +70,10 @@ class CompositorVsyncCallback : public VsyncCallback {
   DrmDisplayCompositor *compositor_;
 };
 
-DrmDisplayCompositor::FrameWorker::FrameWorker(DrmDisplayCompositor *compositor)
-    : Worker("frame-worker", HAL_PRIORITY_URGENT_DISPLAY),
-      compositor_(compositor) {
-}
-
-DrmDisplayCompositor::FrameWorker::~FrameWorker() {
-}
-
-int DrmDisplayCompositor::FrameWorker::Init() {
-  return InitWorker();
-}
-
-void DrmDisplayCompositor::FrameWorker::QueueFrame(
-    std::unique_ptr<DrmDisplayComposition> composition, int status) {
-  Lock();
-
-  FrameState frame;
-  frame.composition = std::move(composition);
-  frame.status = status;
-  frame_queue_.push(std::move(frame));
-  /*
-   * Fix a null-point crash bug.
-   * --------- beginning of crash
-   * Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0xb8 in tid 6074 (frame-worker), pid 6049 (composer@2.1-se)
-   * pid: 6049, tid: 6074, name: frame-worker  >>> /vendor/bin/hw/android.hardware.graphics.composer@2.1-service <<<
-   * uid: 1000
-   * signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0xb8
-   * backtrace:
-   *       #00 pc 000000000003230c  /vendor/lib64/hw/hwcomposer.rk30board.so (android::DrmDisplayCompositor::CommitFrame(..))
-   *       #01 pc 0000000000030e70  /vendor/lib64/hw/hwcomposer.rk30board.so (android::DrmDisplayCompositor::ApplyFrame(..))
-   *       #02 pc 0000000000030d0c  /vendor/lib64/hw/hwcomposer.rk30board.so (android::DrmDisplayCompositor::FrameWorker::Routine()+308)
-   */
-  Signal();
-  Unlock();
-}
-
-void DrmDisplayCompositor::FrameWorker::Routine() {
-  int wait_ret = 0;
-
-  Lock();
-  if (frame_queue_.empty()) {
-    wait_ret = WaitForSignalOrExitLocked();
-  }
-
-  FrameState frame;
-  std::queue<FrameState> frame_queue_temp;
-  std::set<int> exist_display;
-  exist_display.clear();
-  if (!frame_queue_.empty()) {
-    while(frame_queue_.size() > 0){
-      frame = std::move(frame_queue_.front());
-      frame_queue_.pop();
-      if(exist_display.count(frame.composition->display())){
-        frame_queue_temp.push(std::move(frame));
-        continue;
-      }
-      exist_display.insert(frame.composition->display());
-      compositor_->CollectInfo(std::move(frame.composition), frame.status);
-    }
-    while(frame_queue_temp.size()){
-      frame_queue_.push(std::move(frame_queue_temp.front()));
-      frame_queue_temp.pop();
-    }
-  }else{ // frame_queue_ is empty
-    ALOGW_IF(LogLevel(DBG_DEBUG),"%s,line=%d frame_queue_ is empty, skip ApplyFrame",__FUNCTION__,__LINE__);
-    Unlock();
-    return;
-  }
-  Unlock();
-
-  if (wait_ret == -EINTR) {
-    return;
-  } else if (wait_ret) {
-    ALOGE("Failed to wait for signal, %d", wait_ret);
-    return;
-  }
-  compositor_->Commit();
-  compositor_->SyntheticWaitVBlank();
-}
-
-
 DrmDisplayCompositor::DrmDisplayCompositor()
     : resource_manager_(NULL),
       display_(-1),
       worker_(this),
-      frame_worker_(this),
       initialized_(false),
       active_(false),
       use_hw_overlays_(true),
@@ -179,7 +97,6 @@ DrmDisplayCompositor::~DrmDisplayCompositor() {
     ALOGE("Failed to acquire compositor lock %d", ret);
 
   worker_.Exit();
-  frame_worker_.Exit();
 
   DrmDevice *drm = resource_manager_->GetDrmDevice(display_);
   if (mode_.blob_id)
@@ -225,12 +142,6 @@ int DrmDisplayCompositor::Init(ResourceManager *resource_manager, int display) {
   if (ret) {
     pthread_mutex_destroy(&lock_);
     ALOGE("Failed to initialize compositor worker %d\n", ret);
-    return ret;
-  }
-  ret = frame_worker_.Init();
-  if (ret) {
-    pthread_mutex_destroy(&lock_);
-    ALOGE("Failed to initialize frame worker %d\n", ret);
     return ret;
   }
 
@@ -286,10 +197,11 @@ int DrmDisplayCompositor::QueueComposition(
 
   // Block the queue if it gets too large. Otherwise, SurfaceFlinger will start
   // to eat our buffer handles when we get about 1 second behind.
-  while(composite_queue_.size() >= DRM_DISPLAY_COMPOSITOR_MAX_QUEUE_DEPTH){
+  while(queue_exist_display_.count(composition->display())){
     pthread_cond_wait(&composite_queue_cond_,&lock_);
   }
 
+  queue_exist_display_.insert(composition->display());
   composite_queue_.push(std::move(composition));
   clear_ = false;
 
@@ -1533,7 +1445,7 @@ void DrmDisplayCompositor::ClearDisplay() {
     composite_queue_.pop();
     pthread_cond_signal(&composite_queue_cond_);
   }
-
+  queue_exist_display_.clear();
   clear_ = true;
   //vsync_worker_.VSyncControl(false);
 }
@@ -1586,6 +1498,7 @@ int DrmDisplayCompositor::Composite() {
     ALOGE("Failed to acquire compositor lock %d", ret);
     return ret;
   }
+
   if (composite_queue_.empty()) {
     ret = pthread_mutex_unlock(&lock_);
     if (ret)
@@ -1593,10 +1506,36 @@ int DrmDisplayCompositor::Composite() {
     return ret;
   }
 
-  std::unique_ptr<DrmDisplayComposition> composition(
-      std::move(composite_queue_.front()));
+  std::unique_ptr<DrmDisplayComposition> composition;
 
-  composite_queue_.pop();
+  std::set<int> exist_display;
+  exist_display.clear();
+  if (!composite_queue_.empty()) {
+    while(composite_queue_.size() > 0){
+      composition = std::move(composite_queue_.front());
+      composite_queue_.pop();
+      if(exist_display.count(composition->display())){
+        composite_queue_temp_.push(std::move(composition));
+        continue;
+      }
+      queue_exist_display_.erase(composition->display());
+      exist_display.insert(composition->display());
+      CollectInfo(std::move(composition), 0);
+    }
+    while(composite_queue_temp_.size()){
+      composite_queue_.push(std::move(composite_queue_temp_.front()));
+      composite_queue_temp_.pop();
+    }
+  }else{ // frame_queue_ is empty
+    ALOGW_IF(LogLevel(DBG_DEBUG),"%s,line=%d composite_queue_ is empty, skip ApplyFrame",__FUNCTION__,__LINE__);
+    ret = pthread_mutex_unlock(&lock_);
+    if (ret) {
+      ALOGE("Failed to release compositor lock %d", ret);
+      return ret;
+    }
+    return 0;
+  }
+
   pthread_cond_signal(&composite_queue_cond_);
 
   ret = pthread_mutex_unlock(&lock_);
@@ -1605,33 +1544,8 @@ int DrmDisplayCompositor::Composite() {
     return ret;
   }
 
-  switch (composition->type()) {
-    case DRM_COMPOSITION_TYPE_FRAME:
-#if 0 // Internal process optimization for CPU utilisation
-      if (composition->geometry_changed()) {
-        // Send the composition to the kernel to ensure we can commit it. This
-        // is just a test, it won't actually commit the frame.
-        ret = CommitFrame(composition.get(), true);
-        if (ret) {
-          ALOGE("Commit test failed for display %d, FIXME", display_);
-          ClearDisplay();
-          return ret;
-        }
-      }
-#endif
-      frame_worker_.QueueFrame(std::move(composition), ret);
-      break;
-    case DRM_COMPOSITION_TYPE_DPMS:
-      if(composition.get()->dpms_mode() == DRM_MODE_DPMS_OFF)
-          ClearDisplay();
-      return 0;
-    case DRM_COMPOSITION_TYPE_MODESET:
-      return 0;
-    default:
-      ALOGE("Unknown composition type %d", composition->type());
-      return -EINVAL;
-  }
-
+  Commit();
+  SyntheticWaitVBlank();
   return ret;
 }
 

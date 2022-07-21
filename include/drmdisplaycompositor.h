@@ -70,28 +70,6 @@ class DrmDisplayCompositor {
   bool HaveQueuedComposites() const;
 
  private:
-
-  struct FrameState {
-    std::unique_ptr<DrmDisplayComposition> composition;
-    int status = 0;
-  };
-
-  class FrameWorker : public Worker {
-   public:
-    FrameWorker(DrmDisplayCompositor *compositor);
-    ~FrameWorker() override;
-
-    int Init();
-    void QueueFrame(std::unique_ptr<DrmDisplayComposition> composition,
-                    int status);
-
-   protected:
-    void Routine() override;
-
-   private:
-    DrmDisplayCompositor *compositor_;
-    std::queue<FrameState> frame_queue_;
-  };
   struct ModeState {
     bool needs_modeset = false;
     DrmMode mode;
@@ -148,10 +126,11 @@ class DrmDisplayCompositor {
   ResourceManager *resource_manager_;
   int display_;
   DrmCompositorWorker worker_;
-  FrameWorker frame_worker_;
 
   // Store the display request from SF.
   std::queue<std::unique_ptr<DrmDisplayComposition>> composite_queue_;
+  // Store the display request from SF.
+  std::queue<std::unique_ptr<DrmDisplayComposition>> composite_queue_temp_;
   // Store the request that is about to be submitted for display.
   std::map<int,std::unique_ptr<DrmDisplayComposition>> collect_composition_map_;
   // Store the request currently being displayed on the screen.
@@ -187,6 +166,8 @@ class DrmDisplayCompositor {
   int64_t last_timestamp_;
   struct timespec vsync_;
   drmModeAtomicReqPtr pset_ = NULL;
+
+  std::set<int> queue_exist_display_;
 };
 }  // namespace android
 

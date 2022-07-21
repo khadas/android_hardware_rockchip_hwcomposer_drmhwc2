@@ -79,23 +79,23 @@ class DrmHwcTwo : public hwc2_device_t {
     }
 
     HWC2::Composition sf_type() const {
-      return sf_type_;
+      return mCurrentState.sf_type_;
     }
     HWC2::Composition validated_type() const {
-      return validated_type_;
+      return mCurrentState.validated_type_;
     }
     void accept_type_change() {
-      sf_type_ = validated_type_;
+      mCurrentState.sf_type_ = mCurrentState.validated_type_;
     }
     void set_validated_type(HWC2::Composition type) {
-      validated_type_ = type;
+      mCurrentState.validated_type_ = type;
     }
     bool type_changed() const {
-      return sf_type_ != validated_type_;
+      return mCurrentState.sf_type_ != mCurrentState.validated_type_;
     }
 
     uint32_t z_order() const {
-      return z_order_;
+      return mCurrentState.z_order_;
     }
 
     class GemHandle {
@@ -135,6 +135,7 @@ class DrmHwcTwo : public hwc2_device_t {
         uint32_t uGemHandle_=0;
         const char *name_;
     };
+
     typedef struct bufferInfo{
       bufferInfo(){};
       int iFd_=0;
@@ -153,12 +154,87 @@ class DrmHwcTwo : public hwc2_device_t {
       std::string sLayerName_;
     }bufferInfo_t;
 
+    typedef struct Hwc2LayerState{
+      Hwc2LayerState& operator=(Hwc2LayerState& rhs){
+        buffer_         = rhs.buffer_;
+        sf_type_        = rhs.sf_type_;
+        validated_type_ = rhs.validated_type_;
+        alpha_          = rhs.alpha_;
+        blending_       = rhs.blending_;
+        transform_      = rhs.transform_;
+        dataspace_      = rhs.dataspace_;
+        source_crop_    = rhs.source_crop_;
+        display_frame_  = rhs.display_frame_;
+        cursor_x_       = rhs.cursor_x_;
+        cursor_y_       = rhs.cursor_y_;
+        color_          = rhs.color_;
+        z_order_        = rhs.z_order_;
+        sidebandStreamHandle_ = rhs.sidebandStreamHandle_;
+        return *this;
+      }
+
+      bool operator==(Hwc2LayerState& rhs){
+        if( buffer_         == rhs.buffer_ &&
+            sf_type_        == rhs.sf_type_ &&
+            validated_type_ == rhs.validated_type_ &&
+            alpha_          == rhs.alpha_ &&
+            blending_       == rhs.blending_ &&
+            transform_      == rhs.transform_ &&
+            dataspace_      == rhs.dataspace_ &&
+            cursor_x_       == rhs.cursor_x_ &&
+            cursor_y_       == rhs.cursor_y_ &&
+            color_.r        == rhs.color_.r &&
+            color_.g        == rhs.color_.g &&
+            color_.b        == rhs.color_.b &&
+            color_.a        == rhs.color_.a &&
+            z_order_        == rhs.z_order_ &&
+            sidebandStreamHandle_   == rhs.sidebandStreamHandle_ &&
+            source_crop_.left       == rhs.source_crop_.left &&
+            source_crop_.top        == rhs.source_crop_.top &&
+            source_crop_.right      == rhs.source_crop_.right &&
+            source_crop_.bottom     == rhs.source_crop_.bottom &&
+            display_frame_.left   == rhs.display_frame_.left &&
+            display_frame_.top    == rhs.display_frame_.top &&
+            display_frame_.right  == rhs.display_frame_.right &&
+            display_frame_.bottom == rhs.display_frame_.bottom)
+        {
+          return true;
+        }
+        return false;
+      }
+      // BufferHandle
+      buffer_handle_t buffer_ = NULL;
+      // Sidebande
+      buffer_handle_t sidebandStreamHandle_ = NULL;
+      // sf_type_ stores the initial type given to us by surfaceflinger,
+      // validated_type_ stores the type after running ValidateDisplay
+      HWC2::Composition sf_type_ = HWC2::Composition::Invalid;
+      HWC2::Composition validated_type_ = HWC2::Composition::Invalid;
+
+      float alpha_ = 1.0f;
+      HWC2::BlendMode blending_ = HWC2::BlendMode::None;
+      HWC2::Transform transform_ = HWC2::Transform::None;
+      android_dataspace_t dataspace_ = HAL_DATASPACE_UNKNOWN;
+
+      hwc_rect_t display_frame_;
+      hwc_frect_t source_crop_;
+
+      int32_t cursor_x_;
+      int32_t cursor_y_;
+
+      hwc_color_t color_;
+
+      uint32_t z_order_ = 0;
+    } Hwc2LayerState_t;
+
+
     buffer_handle_t buffer() {
       return buffer_;
     }
 
-    void set_buffer(buffer_handle_t buffer) {
+    void CacheBufferInfo(buffer_handle_t buffer) {
       buffer_ = buffer;
+      mCurrentState.buffer_ = buffer;
 
       // Bufferinfo Cache
       uint64_t buffer_id;
@@ -184,7 +260,7 @@ class DrmHwcTwo : public hwc2_device_t {
 
         auto ret = bufferInfoMap_.emplace(std::make_pair(buffer_id, std::make_shared<bufferInfo_t>(bufferInfo())));
         if(ret.second == false){
-          HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ emplace fail! BufferHandle=%p",buffer);
+          HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ emplace fail! BufferHandle=%p",buffer_);
         }else{
           pBufferInfo_ = ret.first->second;
           pBufferInfo_->uBufferId_ = buffer_id;
@@ -217,6 +293,11 @@ class DrmHwcTwo : public hwc2_device_t {
         pBufferInfo_ = mapBuffer->second;
         HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ size = %zu has cache! BufferId=%" PRIx64 " Name=%s",
                              bufferInfoMap_.size(),buffer_id,pBufferInfo_->sLayerName_.c_str());
+      }
+
+      mFrameCount_++;
+      if(mLastFpsTime_ == 0){
+        mLastFpsTime_ = systemTime();
       }
     }
 
@@ -376,6 +457,25 @@ class DrmHwcTwo : public hwc2_device_t {
     void EnableAfbc() { is_afbc_ = true;};
     void DisableAfbc() { is_afbc_ = false;};
     bool isAfbc() { return is_afbc_;};
+    bool StateChange() {
+      if(mCurrentState == mDrawingState){
+        return false;
+      }else{
+        mDrawingState = mCurrentState;
+        return true;
+      }
+    };
+
+    float GetFps(){
+      nsecs_t now = systemTime();
+      nsecs_t diff = now - mLastFpsTime_;
+      if (diff > s2ns(1)) {
+          mFps_ =  ((mFrameCount_ - mLastFrameCount_) * float(s2ns(1))) / diff;
+          mLastFpsTime_ = now;
+          mLastFrameCount_ = mFrameCount_;
+      }
+      return mFps_;
+    }
 
     int DoSvep(bool validate, DrmHwcLayer *drmHwcLayer);
 
@@ -396,38 +496,34 @@ class DrmHwcTwo : public hwc2_device_t {
     HWC2::Error SetLayerZOrder(uint32_t z);
 
    private:
-    // sf_type_ stores the initial type given to us by surfaceflinger,
-    // validated_type_ stores the type after running ValidateDisplay
-    HWC2::Composition sf_type_ = HWC2::Composition::Invalid;
-    HWC2::Composition validated_type_ = HWC2::Composition::Invalid;
-
-    HWC2::BlendMode blending_ = HWC2::BlendMode::None;
+    // Hwc2Layer id
+    uint32_t id_;
+    // Buffer Handle
     buffer_handle_t buffer_ = NULL;
-    // Sidebande
+    // SidebandStream Handle
     buffer_handle_t sidebandStreamHandle_ = NULL;
+    // current frame state
+    Hwc2LayerState_t mCurrentState;
+    // last frame state
+    Hwc2LayerState_t mDrawingState;
+    // Fence
     sp<AcquireFence> acquire_fence_ = AcquireFence::NO_FENCE;
     DeferredReleaseFence release_fence_;
-    hwc_rect_t display_frame_;
-    float alpha_ = 1.0f;
-    hwc_frect_t source_crop_;
-    int32_t cursor_x_;
-    int32_t cursor_y_;
-    HWC2::Transform transform_ = HWC2::Transform::None;
-    uint32_t z_order_ = 0;
-    android_dataspace_t dataspace_ = HAL_DATASPACE_UNKNOWN;
-    std::string layer_name_;
-    bool is_afbc_;
-
-    uint32_t id_;
-    DrmGralloc *drmGralloc_;
-    DrmDevice *drm_;
 
     // Buffer info map
     bool bHasCache_ = false;
     std::map<uint64_t, std::shared_ptr<bufferInfo_t>> bufferInfoMap_;
+    std::string layer_name_;
+    bool is_afbc_;
 
     // Buffer info point
     std::shared_ptr<bufferInfo_t> pBufferInfo_;
+
+    // Hwc2Layer fps, for debug.
+    int mFrameCount_;
+    int mLastFrameCount_ = 0;
+    nsecs_t mLastFpsTime_ = 0;
+    float mFps_;
 
 #ifdef USE_LIBSVEP
     std::shared_ptr<DrmBufferQueue> bufferQueue_;
@@ -435,6 +531,9 @@ class DrmHwcTwo : public hwc2_device_t {
     bool bSvepReady_;
     SvepContext svepCtx_;
 #endif
+    // DRM Resource
+    DrmGralloc *drmGralloc_;
+    DrmDevice *drm_;
   };
 
   struct HwcCallback {
@@ -548,6 +647,7 @@ class DrmHwcTwo : public hwc2_device_t {
     HWC2::Error ValidatePlanes();
     HWC2::Error InitDrmHwcLayer();
     HWC2::Error CreateComposition();
+    bool IsLayerStateChange();
     int ImportBuffers();
     void AddFenceToRetireFence(int fd);
     int DoMirrorDisplay(int32_t *retire_fence);
