@@ -162,6 +162,10 @@ typedef struct StateContext{
   // 8k display mode
   bool b8kMode_;
   bool b4k120pMode_;
+
+  // resolution mode
+  int iDisplayWidth_;
+  int iDisplayHeight_;
 } StaCtx;
 
 typedef struct DrmVop2Context{

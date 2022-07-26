@@ -701,25 +701,72 @@ int Vop3588::MatchPlane(std::vector<DrmCompositionPlane> *composition_planes,
                           }
 
                           // Scale
-                          // RK3588 源数据宽大于4096时且在8K分辨率条件下，缩放系数需要做调整：
-                          //   Cluster:目前仅支持0.9-1.1的缩放;
+                          // RK3588 源数据宽大于 4096 且在 8K 分辨率条件下，缩放系数需要做调整：
+                          //   Cluster:目前仅支持 0.9-1.1 的居中缩放;
                           //   Esmart：可以支持 0.125-8 缩放；
-                          bool b8kScaleMode = false;
+                          bool b8kInputScaleMode = false;
                           if(b8kMode && (input_w > 4096))
-                            b8kScaleMode = true;
+                            b8kInputScaleMode = true;
 
-                          if((b8kScaleMode ? (*iter_plane)->is_support_scale_8k((*iter_layer)->fHScaleMul_) : \
-                                       (*iter_plane)->is_support_scale((*iter_layer)->fHScaleMul_))   &&
-                             (b8kScaleMode ? (*iter_plane)->is_support_scale_8k((*iter_layer)->fVScaleMul_) : \
-                                       (*iter_plane)->is_support_scale((*iter_layer)->fVScaleMul_)))
-                            bNeed = true;
-                          else{
-                            ALOGD_IF(LogLevel(DBG_DEBUG),"%s cann't support scale factor(%f,%f)",
-                                    (*iter_plane)->name(), (*iter_layer)->fHScaleMul_, (*iter_layer)->fVScaleMul_);
-                            continue;
+                          // RK3588 源数据宽大于 3840 小于 4096 且在 8K 分辨率条件下，缩小系数需要做调整：
+                          //   Cluster:目前仅支持 0.9-1 的居中缩小;
+                          //   Esmart：可以支持 0.125-8 缩放；
+                          bool b4kInputScaleMode = false;
+                          if(b8kMode && (input_w >= 3840 && input_w <= 4096))
+                            b4kInputScaleMode = true;
+
+                          // 居中缩放标志，容忍值设置为 2 pixel
+                          bool bCenterScale =
+                               (ctx.state.iDisplayWidth_  - (output_w + 2 * (*iter_layer)->display_frame.left)) < 2 &&
+                               (ctx.state.iDisplayHeight_ - (output_h + 2 * (*iter_layer)->display_frame.top))  < 2;
+
+                          // 8K分辨率目前仅支持居中缩放
+                          if(b8kInputScaleMode){
+                            if( bCenterScale &&
+                                (*iter_plane)->is_support_scale_8k((*iter_layer)->fHScaleMul_) &&
+                                (*iter_plane)->is_support_scale_8k((*iter_layer)->fVScaleMul_) ){
+                              bNeed = true;
+                            }else{
+                              ALOGD_IF(LogLevel(DBG_DEBUG),"%s cann't support bCenterScale(%d) factor(%f,%f)",
+                                        (*iter_plane)->name(),
+                                        bCenterScale,
+                                        (*iter_layer)->fHScaleMul_,
+                                        (*iter_layer)->fVScaleMul_);
+                              continue;
+                            }
+                          }else if(b4kInputScaleMode){
+                            if((*iter_plane)->is_support_scale((*iter_layer)->fHScaleMul_) &&
+                                (*iter_plane)->is_support_scale((*iter_layer)->fVScaleMul_) &&
+                                // 放大无要求
+                                (( (*iter_layer)->fHScaleMul_ <= 1.0 &&
+                                  (*iter_layer)->fVScaleMul_ <= 1.0)   ||
+                                // 缩小有居中缩小要求
+                                (bCenterScale &&
+                                  (*iter_layer)->fHScaleMul_ < 1.1 &&
+                                  (*iter_layer)->fVScaleMul_ < 1.1))){
+                              bNeed = true;
+                            }else{
+                              ALOGD_IF(LogLevel(DBG_DEBUG),"%s cann't support bCenterScale(%d) factor(%f,%f)",
+                                        (*iter_plane)->name(),
+                                        bCenterScale,
+                                        (*iter_layer)->fHScaleMul_,
+                                        (*iter_layer)->fVScaleMul_);
+                              continue;
+                            }
+                          }else{
+                            if((*iter_plane)->is_support_scale((*iter_layer)->fHScaleMul_) &&
+                               (*iter_plane)->is_support_scale((*iter_layer)->fVScaleMul_)){
+                                bNeed = true;
+                            }else{
+                              ALOGD_IF(LogLevel(DBG_DEBUG),"%s cann't support scale factor(%f,%f)",
+                                        (*iter_plane)->name(),
+                                        (*iter_layer)->fHScaleMul_,
+                                        (*iter_layer)->fVScaleMul_);
+                              continue;
+                            }
                           }
 
-                          // Scale
+                          // Scale 4K 120帧分辨率下
                           // RK3588 源数据宽大于3840时，不支持缩小
                           bool b4k120ScaleMode = false;
                           if(b4k120Mode && (input_w >= 3840))
@@ -2111,7 +2158,7 @@ void Vop3588::InitStateContext(
   ALOGI_IF(LogLevel(DBG_DEBUG),"%s,line=%d bMultiAreaEnable=%d, bMultiAreaScaleEnable=%d",
             __FUNCTION__,__LINE__,ctx.state.bMultiAreaEnable,ctx.state.bMultiAreaScaleEnable);
 
-  // 8K Mode or 4K 120 Mode
+  // Check dispaly Mode : 8K Mode or 4K 120 Mode
   DrmDevice *drm = crtc->getDrmDevice();
   DrmConnector *conn = drm->GetConnectorForDisplay(crtc->display());
   if(conn && conn->state() == DRM_MODE_CONNECTED){
@@ -2122,6 +2169,10 @@ void Vop3588::InitStateContext(
     if(ctx.state.b4k120pMode_ != mode.is_4k120p_mode()){
       HWC2_ALOGD_IF_DEBUG("%s 4K 120 Mode.", mode.is_4k120p_mode() ? "Enter" : "Quit");
     }
+    // Story Display Mode
+    ctx.state.iDisplayWidth_ = mode.v_display();
+    ctx.state.iDisplayHeight_ = mode.h_display();
+
     ctx.state.b8kMode_     = mode.is_8k_mode();
     ctx.state.b4k120pMode_ = mode.is_4k120p_mode();
     if(ctx.state.b8kMode_){
