@@ -1289,21 +1289,31 @@ bool DrmHwcTwo::HwcDisplay::IsLayerStateChange() {
 
   char value[PROPERTY_VALUE_MAX];
   property_get("vendor.hwc.disble_layer_state_check", value, "0");
-  if(atoi(value) > 0)
-    return true;
 
+  bool is_state_change = false;
+  if(atoi(value) > 0){
+    is_state_change = true;
+  }
+
+  bool use_client = false;
   for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_){
+    if(l.second.validated_type() == HWC2::Composition::Client){
+      use_client = true;
+    }
     if(l.second.StateChange()){
-      return true;
+      is_state_change = true;
     }
   }
 
-  if(client_layer_.StateChange()){
-    return true;
+  if(use_client && client_layer_.StateChange()){
+    is_state_change = true;
   }
-
-  HWC2_ALOGD_IF_DEBUG("display=%d all LayerState no change skip Present! frame_no=%d",
-      static_cast<int>(handle_), frame_no_);
+  if(is_state_change){
+    return is_state_change;
+  }else{
+    HWC2_ALOGD_IF_DEBUG("display=%d all LayerState no change skip Present! frame_no=%d",
+        static_cast<int>(handle_), frame_no_);
+  }
   return false;
 }
 
