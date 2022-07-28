@@ -1861,6 +1861,13 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetClientTarget(buffer_handle_t target,
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 ", Buffer=%p, acq_fence=%d, dataspace=%x",
                          handle_,target,acquire_fence,dataspace);
 
+  // 动态切换刷新率过程中SurfaceFlinger会出现 SetClientTarget target=null的情况
+  // 为了避免错误日志打印，故暂时对这种情况进行规避；
+  if(target == NULL){
+    HWC2_ALOGW("Buffer is NULL, skip SetClientTarget");
+    return HWC2::Error::None;
+  }
+
   client_layer_.CacheBufferInfo(target);
   client_layer_.set_acquire_fence(sp<AcquireFence>(new AcquireFence(acquire_fence)));
   client_layer_.SetLayerDataspace(dataspace);
