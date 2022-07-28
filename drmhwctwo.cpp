@@ -975,7 +975,11 @@ HWC2::Error DrmHwcTwo::HwcDisplay::GetDisplayConfigs(uint32_t *num_configs,
       ctx_.rel_yres = best_mode.v_display();
     }
 
-    ctx_.vrefresh = best_mode.v_refresh();
+    // 动态可变刷新率要求将刷新率上报
+    if(best_mode.v_refresh() > 0){
+      ctx_.vrefresh = best_mode.v_refresh();
+    }
+
     // AFBC limit
     bool disable_afbdc = false;
     if(handle_ == HWC_DISPLAY_PRIMARY){
