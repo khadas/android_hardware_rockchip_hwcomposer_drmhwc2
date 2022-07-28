@@ -144,20 +144,23 @@ bool DrmDevice::mode_verify(const DrmMode &m) {
 }
 
 int DrmDevice::InitEnvFromXml(){
-  tinyxml2::XMLDocument doc;
 
-  int ret = doc.LoadFile(DRM_ENV_XML_PATH);
+  char xml_path[PROPERTY_VALUE_MAX];
+  property_get(DRM_XML_PATH_NAME, xml_path, "/vendor/etc/HwComposerEnv.xml");
+
+  tinyxml2::XMLDocument doc;
+  int ret = doc.LoadFile(xml_path);
   if(ret){
-    HWC2_ALOGW("Can't find %s file. ret=%d", DRM_ENV_XML_PATH, ret);
+    HWC2_ALOGW("Can't find %s file. ret=%d", xml_path, ret);
     return -1;
   }
 
-  HWC2_ALOGI("Load %s success.", DRM_ENV_XML_PATH);
+  HWC2_ALOGI("Load %s success.", xml_path);
 
   tinyxml2::XMLElement* HwComposerEnv = doc.RootElement();
   /* usr tingxml2 to parse resolution.xml */
   if (!HwComposerEnv){
-    HWC2_ALOGW("Can't %s:RootElement fail.", DRM_ENV_XML_PATH);
+    HWC2_ALOGW("Can't %s:RootElement fail.", xml_path);
     return -1;
   }
 
@@ -166,7 +169,7 @@ int DrmDevice::InitEnvFromXml(){
   const char* verison = "1.1.1";
   ret = HwComposerEnv->QueryStringAttribute( "Version", &verison);
   if(ret){
-    HWC2_ALOGW("Can't find %s verison info. ret=%d", DRM_ENV_XML_PATH, ret);
+    HWC2_ALOGW("Can't find %s verison info. ret=%d", xml_path, ret);
     return -1;
   }
 
@@ -177,7 +180,7 @@ int DrmDevice::InitEnvFromXml(){
 
   tinyxml2::XMLElement* pDisplayMode = HwComposerEnv->FirstChildElement("DsiplayMode");
   if (!pDisplayMode){
-    HWC2_ALOGE("Can't %s:DsiplayMode fail.", DRM_ENV_XML_PATH);
+    HWC2_ALOGE("Can't %s:DsiplayMode fail.", xml_path);
     return -1;
   }
 
@@ -191,7 +194,7 @@ int DrmDevice::InitEnvFromXml(){
 
   tinyxml2::XMLElement* pConnector = pDisplayMode->FirstChildElement("Connector");
   if (!pConnector){
-    HWC2_ALOGE("Can't %s:Connector fail.", DRM_ENV_XML_PATH);
+    HWC2_ALOGE("Can't %s:Connector fail.", xml_path);
     return -1;
   }
   while (pConnector) {

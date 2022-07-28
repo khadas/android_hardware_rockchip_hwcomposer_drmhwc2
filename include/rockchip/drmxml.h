@@ -37,7 +37,7 @@
 #ifndef _DRM_XML_H_
 #define _DRM_XML_H_
 
-#define DRM_ENV_XML_PATH "/vendor/etc/HwComposerEnv.xml"
+#define DRM_XML_PATH_NAME "vendor.hwc.env_xml_path"
 
 enum DrmDisplayMode {
   DRM_DISPLAY_MODE_NORMAL = 0,
