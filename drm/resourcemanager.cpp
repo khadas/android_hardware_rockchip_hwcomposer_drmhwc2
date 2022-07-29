@@ -449,5 +449,39 @@ int ResourceManager::SwapWBBuffer(){
   return 0;
 }
 
+int ResourceManager::ClearBufferId(int display){
+  std::lock_guard<std::mutex> lock(mtx_);
+  auto &buffer_id_set = mMapDisplayBufferSet_[display];
+  buffer_id_set.clear();
+  return 0;
+}
+int ResourceManager::AddBufferId(int display, uint64_t buffer_id){
+  std::lock_guard<std::mutex> lock(mtx_);
+  auto &buffer_id_set = mMapDisplayBufferSet_[display];
+  buffer_id_set.insert(buffer_id);
+  HWC2_ALOGI("BufferId=0x%" PRIu64 , buffer_id);
+  return 0;
+}
 
+int ResourceManager::RemoveBufferId(int display, uint64_t buffer_id){
+  std::lock_guard<std::mutex> lock(mtx_);
+  auto &buffer_id_set = mMapDisplayBufferSet_[display];
+  buffer_id_set.erase(buffer_id);
+  HWC2_ALOGI("BufferId=0x%" PRIu64 , buffer_id);
+  return 0;
+}
+
+bool ResourceManager::IsUniqueBufferId(int display, uint64_t buffer_id){
+  std::lock_guard<std::mutex> lock(mtx_);
+  for(auto &map : mMapDisplayBufferSet_){
+    if(map.first != display){
+      if(map.second.count(buffer_id)){
+        HWC2_ALOGI("display=%d not unique BufferId=0x%" PRIu64 , display, buffer_id);
+        return false;
+      }
+    }
+  }
+  HWC2_ALOGI("display=%d is-unique BufferId=0x%" PRIu64 , display, buffer_id);
+  return true;
+}
 }  // namespace android

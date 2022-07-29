@@ -1421,6 +1421,17 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition() {
     map.geometry_changed = true;
   }
 
+  if(handle_ > 0){
+    // if((frame_no_ % 2) == 1){
+    if(bDropFrame_){
+      for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_){
+          l.second.set_release_fence(l.second.back_release_fence());
+      }
+      d_retire_fence_.add(d_retire_fence_.get_back());
+      return HWC2::Error::None;
+    }
+  }
+
   ret = ImportBuffers();
   if(ret){
       HWC2_ALOGE("Failed to ImportBuffers, ret=%d", ret);
@@ -2129,8 +2140,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
   ATRACE_CALL();
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 ,handle_);
 
-  if(LogLevel(DBG_DEBUG))
-    DumpDisplayLayersInfo();
+  DumpDisplayLayersInfo();
 
   // 虚拟屏
   if(isVirtual()){
@@ -2171,6 +2181,35 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
     ClearDisplay();
     composition_planes_.clear();
     validate_success_ = false;
+    return HWC2::Error::None;
+  }
+
+
+  // 统计所有图层信息, 判断是否为异显 Display
+  bool is_unique_display = true;
+  resource_manager_->ClearBufferId(handle_);
+  for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_){
+    auto buffer_info_ptr = l.second.GetBufferInfo();
+    if(buffer_info_ptr != NULL){
+      resource_manager_->AddBufferId(handle_, buffer_info_ptr->uBufferId_);
+      if(!resource_manager_->IsUniqueBufferId(handle_, buffer_info_ptr->uBufferId_)){
+        is_unique_display = false;
+      }
+    }
+  }
+
+  if(is_unique_display){
+    HWC2_ALOGI("display-id=%" PRIu64 " is unique display.",handle_);
+  }
+
+  bDropFrame_ = false;
+  // if((frame_no_ % 2) == 1){
+  if(is_unique_display && compositor_->DropCurrentFrame(handle_, frame_no_)){
+    bDropFrame_ = true;
+    ALOGI("display=%d drop frame_no=%d!",
+    static_cast<int>(handle_), frame_no_);
+    for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_)
+      l.second.set_validated_type(HWC2::Composition::Device);
     return HWC2::Error::None;
   }
 

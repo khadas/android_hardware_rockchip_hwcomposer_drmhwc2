@@ -160,6 +160,66 @@ std::unique_ptr<DrmDisplayComposition> DrmDisplayCompositor::CreateComposition()
   return std::unique_ptr<DrmDisplayComposition>(new DrmDisplayComposition());
 }
 
+static const int64_t kOneSecondNs = 1 * 1000 * 1000 * 1000;
+bool DrmDisplayCompositor::DropCurrentFrame(int display, int64_t frame_no) {
+  // Primary fps
+  DrmDevice *drm = resource_manager_->GetDrmDevice(0);
+  DrmConnector *primary = drm->GetConnectorForDisplay(0);
+  float pri_refresh = 60.0f, cur_refresh = 60.0f;  // Default to 60Hz refresh rate
+  if (primary && primary->state() == DRM_MODE_CONNECTED) {
+    if (primary->active_mode().v_refresh() > 0.0f)
+      pri_refresh = primary->active_mode().v_refresh();
+  }
+
+  DrmConnector *conn = drm->GetConnectorForDisplay(display_);
+  if (conn && conn->state() == DRM_MODE_CONNECTED) {
+    if (conn->active_mode().v_refresh() > 0.0f)
+      cur_refresh = conn->active_mode().v_refresh();
+  }
+
+ // 若当前的屏幕的刷新率大于或者等于主屏，则不使用丢帧逻辑
+  if(cur_refresh >= pri_refresh){
+    return false;
+  }
+
+  int ret = pthread_mutex_lock(&lock_);
+  if (ret) {
+    ALOGE("Failed to acquire compositor lock %d", ret);
+    return ret;
+  }
+
+  // 通过 “frame_no - iLastDropFrameNo_ > 1” 避免跳过连续的两帧
+  ALOGI("rk-debug mapDisplayHaveQeueuCnt_.count(%d) = %" PRIu64 " composite_queue_.size()=%zu",
+        display,
+        mapDisplayHaveQeueuCnt_[display],
+        composite_queue_.size());
+  if(frame_no - iLastDropFrameNo_ > 1 && mapDisplayHaveQeueuCnt_[display] >= 1){
+    // struct timespec current_time;
+    // int ret = clock_gettime(CLOCK_MONOTONIC, &current_time);
+    // int64_t current_timestamp = current_time.tv_sec * kOneSecondNs + current_time.tv_nsec;
+    // float refresh = 60.0f;  // Default to 60Hz refresh rate
+    // int64_t vsync_timestamp = kOneSecondNs / cur_refresh;
+    // // 若当前的时间戳距离上一次 Vsync 时间大于 * T-Vsync，则考虑丢弃该帧
+    if(mapDisplayHaveQeueuCnt_[display] >= 1){
+      ret = pthread_mutex_unlock(&lock_);
+      if (ret) {
+        ALOGE("Failed to release compositor lock %d", ret);
+        return ret;
+      }
+      iLastDropFrameNo_ = frame_no;
+      return true;
+    }
+  }
+
+  ret = pthread_mutex_unlock(&lock_);
+  if (ret) {
+    ALOGE("Failed to release compositor lock %d", ret);
+    return ret;
+  }
+
+  return false;
+}
+
 int DrmDisplayCompositor::QueueComposition(
     std::unique_ptr<DrmDisplayComposition> composition) {
 
@@ -195,13 +255,21 @@ int DrmDisplayCompositor::QueueComposition(
     return ret;
   }
 
+  ALOGI("rk-debug display=%d wait start cond=%p frame_no=%" PRIu64,
+      composition->display(),
+      &composite_queue_cond_,
+      composition->frame_no());
   // Block the queue if it gets too large. Otherwise, SurfaceFlinger will start
   // to eat our buffer handles when we get about 1 second behind.
-  while(queue_exist_display_.count(composition->display())){
+  while(mapDisplayHaveQeueuCnt_[composition->display()] >= 1){
     pthread_cond_wait(&composite_queue_cond_,&lock_);
   }
 
-  queue_exist_display_.insert(composition->display());
+  ALOGI("rk-debug display=%d wait end cond=%p composite_queue_.size = %" PRIu64 ,
+                                                                        composition->display(),
+                                                                        &composite_queue_cond_,
+                                                                        mapDisplayHaveQeueuCnt_[composition->display()]);
+  mapDisplayHaveQeueuCnt_[composition->display()]++;
   composite_queue_.push(std::move(composition));
   clear_ = false;
 
@@ -377,7 +445,6 @@ int DrmDisplayCompositor::CheckOverscan(drmModeAtomicReqPtr pset, DrmCrtc* crtc,
   return ret;
 }
 
-static const int64_t kOneSecondNs = 1 * 1000 * 1000 * 1000;
 int DrmDisplayCompositor::GetTimestamp() {
   struct timespec current_time;
   int ret = clock_gettime(CLOCK_MONOTONIC, &current_time);
@@ -902,7 +969,7 @@ int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
       out_log << " async_commit=" << sideband;
     }
 
-    ALOGD_IF(LogLevel(DBG_INFO),"%s",out_log.str().c_str());
+    ALOGI("%s",out_log.str().c_str());
     out_log.clear();
   }
   return ret;
@@ -1445,7 +1512,7 @@ void DrmDisplayCompositor::ClearDisplay() {
     composite_queue_.pop();
     pthread_cond_signal(&composite_queue_cond_);
   }
-  queue_exist_display_.clear();
+  mapDisplayHaveQeueuCnt_.clear();
   clear_ = true;
   //vsync_worker_.VSyncControl(false);
 }
@@ -1518,7 +1585,7 @@ int DrmDisplayCompositor::Composite() {
         composite_queue_temp_.push(std::move(composition));
         continue;
       }
-      queue_exist_display_.erase(composition->display());
+      mapDisplayHaveQeueuCnt_[composition->display()]--;
       exist_display.insert(composition->display());
       CollectInfo(std::move(composition), 0);
     }
@@ -1536,6 +1603,7 @@ int DrmDisplayCompositor::Composite() {
     return 0;
   }
 
+  ALOGI("rk-debug display=%d signal cond=%p",display(),&composite_queue_cond_);
   pthread_cond_signal(&composite_queue_cond_);
 
   ret = pthread_mutex_unlock(&lock_);

@@ -156,6 +156,10 @@ class DeferredRetireFence {
             mFences.emplace(new ReleaseFence(fenceFd, name));
             mFences.pop();
         }
+        void add(sp<ReleaseFence> rf) {
+            mFences.push(rf);
+            mFences.pop();
+        }
 
         const sp<ReleaseFence> &get() const {
             return mFences.front();

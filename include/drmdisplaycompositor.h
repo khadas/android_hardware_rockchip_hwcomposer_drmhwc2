@@ -63,7 +63,7 @@ class DrmDisplayCompositor {
   void Vsync(int display, int64_t timestamp);
   void SingalCompsition(std::unique_ptr<DrmDisplayComposition> composition);
   void ClearDisplay();
-
+  bool DropCurrentFrame(int display, int64_t frame_no);
   int display() { return display_;};
   std::tuple<uint32_t, uint32_t, int> GetActiveModeResolution();
 
@@ -167,7 +167,9 @@ class DrmDisplayCompositor {
   struct timespec vsync_;
   drmModeAtomicReqPtr pset_ = NULL;
 
-  std::set<int> queue_exist_display_;
+  std::map<int, uint64_t> mapDisplayHaveQeueuCnt_;
+
+  int64_t iLastDropFrameNo_;
 };
 }  // namespace android
 

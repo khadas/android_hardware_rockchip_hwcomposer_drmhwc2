@@ -299,6 +299,7 @@ class DrmHwcTwo : public hwc2_device_t {
       if(mLastFpsTime_ == 0){
         mLastFpsTime_ = systemTime();
       }
+      // ALOGI("rk-debug Name=%s mFps=%f", pBufferInfo_->sLayerName_.c_str(), GetFps());;
     }
 
     void set_output_buffer(buffer_handle_t buffer) {
@@ -695,6 +696,7 @@ class DrmHwcTwo : public hwc2_device_t {
     uint32_t frame_no_ = 0;
     SyncTimeline sync_timeline_;
     DeferredRetireFence d_retire_fence_;
+    bool bDropFrame_;
   };
 
   class DrmHotplugHandler : public DrmEventHandler {

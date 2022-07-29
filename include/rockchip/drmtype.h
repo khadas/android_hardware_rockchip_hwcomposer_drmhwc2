@@ -144,6 +144,8 @@ enum v4l2_colorspace {
         /*
          * Default colorspace, i.e. let the driver figure it out.
          * Can only be used with video capture.
+         * CSC：RGB : BT709 Limit range
+         *      YUV : BT601 limit range
          */
         V4L2_COLORSPACE_DEFAULT       = 0,
 

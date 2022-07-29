@@ -96,6 +96,13 @@ class ResourceManager {
   int SwapWBBuffer();
   // WriteBack interface.
 
+  // 判断同显与异显的方法
+  int ClearBufferId(int display);
+  int AddBufferId(int display, uint64_t buffer_id);
+  int RemoveBufferId(int display, uint64_t buffer_id);
+  bool IsUniqueBufferId(int display, uint64_t buffer_id);
+
+
  private:
   ResourceManager();
   ResourceManager(const ResourceManager &) = delete;
@@ -127,6 +134,8 @@ class ResourceManager {
   std::shared_ptr<DrmBuffer> mNextWriteBackBuffer_;
   std::shared_ptr<DrmBuffer> mDrawingWriteBackBuffer_;
   std::shared_ptr<DrmBuffer> mFinishWriteBackBuffer_;
+
+  std::map<int, std::set<uint64_t>> mMapDisplayBufferSet_;
 
   mutable std::mutex mtx_;
 };
