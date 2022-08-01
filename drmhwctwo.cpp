@@ -1309,9 +1309,15 @@ bool DrmHwcTwo::HwcDisplay::IsLayerStateChange() {
     }
   }
 
+  if(layers_.size() != iLastLayerSize_){
+    iLastLayerSize_ = layers_.size();
+    is_state_change = true;
+  }
+
   if(use_client && client_layer_.StateChange()){
     is_state_change = true;
   }
+
   if(is_state_change){
     return is_state_change;
   }else{

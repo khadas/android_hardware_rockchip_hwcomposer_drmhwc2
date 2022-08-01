@@ -688,6 +688,7 @@ class DrmHwcTwo : public hwc2_device_t {
     bool bNeedSyncPMState_;
     HWC2::PowerMode mPowerMode_;
     int fb_blanked;
+    int iLastLayerSize_;
 
     uint32_t frame_no_ = 0;
     SyncTimeline sync_timeline_;
