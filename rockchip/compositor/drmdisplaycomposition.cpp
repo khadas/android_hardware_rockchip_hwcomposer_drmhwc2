@@ -197,6 +197,10 @@ int DrmDisplayComposition::CreateAndAssignReleaseFences(SyncTimeline &sync_timel
         HWC2_ALOGD_IF_DEBUG(" Create SvepReleaseFence(%s) Sucess: frame = %" PRIu64 " LayerName=%s",acBuf, frame_no_, layer->sLayerName_.c_str());
       }
 #endif
+      if(layer->bUseRga_){
+        layer->pRgaBuffer_->SetReleaseFence(dup(layer->release_fence->getFd()));
+        HWC2_ALOGD_IF_DEBUG(" Create RgaReleaseFence(%s) Sucess: frame = %" PRIu64 " LayerName=%s",acBuf, frame_no_, layer->sLayerName_.c_str());
+      }
     }else{
       HWC2_ALOGE(" Create ReleaseFence(%s) Fail!: frame = %" PRIu64 " LayerName=%s",acBuf, frame_no_, layer->sLayerName_.c_str());
       return -1;

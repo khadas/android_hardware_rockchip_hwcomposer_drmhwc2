@@ -176,9 +176,10 @@ typedef struct DrmVop2Context{
 
  public:
   Vop3588()
+    : rgaBufferQueue_((std::make_shared<DrmBufferQueue>()))
 #ifdef USE_LIBSVEP
-    :
-    bufferQueue_((std::make_shared<DrmBufferQueue>()))
+     ,
+     bufferQueue_((std::make_shared<DrmBufferQueue>()))
 #endif
   {
     Init();
@@ -196,6 +197,9 @@ typedef struct DrmVop2Context{
   int TryOverlayPolicy(std::vector<DrmCompositionPlane> *composition,
                         std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
                         std::vector<PlaneGroup *> &plane_groups);
+  int TryRgaOverlayPolicy(std::vector<DrmCompositionPlane> *composition,
+                      std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
+                      std::vector<PlaneGroup *> &plane_groups);
   int TryMixSidebandPolicy(std::vector<DrmCompositionPlane> *composition,
                     std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
                     std::vector<PlaneGroup *> &plane_groups);
@@ -276,13 +280,14 @@ typedef struct DrmVop2Context{
                      DrmCompositionPlane::Type type, DrmCrtc *crtc,
                      std::pair<int, std::vector<DrmHwcLayer*>> layers, int zpos, bool match_best);
  private:
+  Vop2Ctx ctx;
+  std::shared_ptr<DrmBufferQueue> rgaBufferQueue_;
 #ifdef USE_LIBSVEP
   Svep* svep_;
   bool bSvepReady_;
   SvepContext svepCtx_;
   std::shared_ptr<DrmBufferQueue> bufferQueue_;
 #endif
-  Vop2Ctx ctx;
 };
 
 }  // namespace android

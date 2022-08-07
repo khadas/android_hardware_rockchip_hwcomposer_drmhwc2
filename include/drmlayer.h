@@ -248,9 +248,14 @@ struct DrmHwcLayer {
   // Sideband Stream
   bool bSidebandStreamLayer_;
 
+  // Use Rga
+  bool bUseRga_;
+  std::shared_ptr<DrmBuffer> pRgaBuffer_;
+
   bool bUseSvep_;
-  DrmLayerInfoStore storeLayerInfo_;
   std::shared_ptr<DrmBuffer> pSvepBuffer_;
+
+  DrmLayerInfoStore storeLayerInfo_;
 
   int ImportBuffer(Importer *importer);
   int Init();

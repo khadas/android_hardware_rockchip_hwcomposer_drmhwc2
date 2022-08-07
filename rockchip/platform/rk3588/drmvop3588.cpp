@@ -39,9 +39,16 @@
 #include "rockchip/platform/drmvop3588.h"
 #include "drmdevice.h"
 
-#include <log/log.h>
+#include "im2d.hpp"
 
+#include <drm_fourcc.h>
+#include <log/log.h>
 namespace android {
+
+#define ALIGN_DOWN( value, base)	(value & (~(base-1)) )
+#ifndef ALIGN
+#define ALIGN( value, base ) (((value) + ((base) - 1)) & ~((base) - 1))
+#endif
 
 void Vop3588::Init(){
 
@@ -93,7 +100,6 @@ int Vop3588::TryHwcPolicy(
     }
   }
 #endif
-
   // Try to match overlay policy
   if(ctx.state.setHwcPolicy.count(HWC_OVERLAY_LOPICY)){
     ret = TryOverlayPolicy(composition,layers,crtc,plane_groups);
@@ -104,7 +110,6 @@ int Vop3588::TryHwcPolicy(
       TryMix();
     }
   }
-
 
   // Try to match mix policy
   if(ctx.state.setHwcPolicy.count(HWC_MIX_LOPICY)){
@@ -1152,6 +1157,283 @@ int Vop3588::TryOverlayPolicy(
   return 0;
 }
 
+int Vop3588::TryRgaOverlayPolicy(
+    std::vector<DrmCompositionPlane> *composition,
+    std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
+    std::vector<PlaneGroup *> &plane_groups) {
+  ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
+  char value[PROPERTY_VALUE_MAX];
+  property_get("vendor.hwc.disable_rga_policy", value, "0");
+  if(atoi(value) > 0){
+    HWC2_ALOGD_IF_DEBUG("vendor.hwc.disable_rga_policy=%d skip policy.", atoi(value));
+    return -1;
+  }
+
+  std::vector<DrmHwcLayer*> tmp_layers;
+  ResetLayer(layers);
+  ResetPlaneGroups(plane_groups);
+
+  bool rga_layer_ready = false;
+  bool use_laster_rga_layer = false;
+  std::shared_ptr<DrmBuffer> dst_buffer;
+  static uint64_t last_buffer_id = 0;
+  int releaseFence = -1;
+  for(auto &drmLayer : layers){
+    if(drmLayer->bYuv_){
+        ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
+        if(last_buffer_id != drmLayer->uBufferId_){
+
+          bool yuv_10bit = false;
+          switch(drmLayer->iFormat_){
+          case HAL_PIXEL_FORMAT_YUV420_10BIT_I:
+          case HAL_PIXEL_FORMAT_YCrCb_NV12_10:
+            yuv_10bit = true;
+            break;
+          default:
+            break;
+          }
+
+          if(yuv_10bit){
+            // RGA 内部特殊修改，需要满足byte_stride 64对齐，width 2对齐
+            dst_buffer = rgaBufferQueue_->DequeueDrmBuffer(ALIGN(ctx.state.iDisplayWidth_, 2),
+                                                           ctx.state.iDisplayHeight_,
+                                                           HAL_PIXEL_FORMAT_YCrCb_NV12_10,
+                                                           RK_GRALLOC_USAGE_STRIDE_ALIGN_64 | MALI_GRALLOC_USAGE_NO_AFBC,
+                                                           "RGA-SurfaceView");
+          }else{
+            dst_buffer = rgaBufferQueue_->DequeueDrmBuffer(ctx.state.iDisplayWidth_,
+                                                           ctx.state.iDisplayHeight_,
+                                                           HAL_PIXEL_FORMAT_YCrCb_NV12,
+                                                           RK_GRALLOC_USAGE_STRIDE_ALIGN_16 | MALI_GRALLOC_USAGE_NO_AFBC,
+                                                           "RGA-SurfaceView");
+
+          }
+
+          if(dst_buffer == NULL){
+            HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
+            continue;
+          }
+
+          rga_buffer_t src;
+          rga_buffer_t dst;
+          rga_buffer_t pat;
+          im_rect src_rect;
+          im_rect dst_rect;
+          im_rect pat_rect;
+          memset(&src, 0, sizeof(rga_buffer_t));
+          memset(&dst, 0, sizeof(rga_buffer_t));
+          memset(&pat, 0, sizeof(rga_buffer_t));
+          memset(&src_rect, 0, sizeof(im_rect));
+          memset(&dst_rect, 0, sizeof(im_rect));
+          memset(&pat_rect, 0, sizeof(im_rect));
+
+          // Set src buffer info
+          src.fd      = drmLayer->iFd_;
+          src.width   = drmLayer->iWidth_;
+          src.height  = drmLayer->iHeight_;
+          src.wstride = drmLayer->iStride_;
+          src.hstride = drmLayer->iHeight_;
+          src.format  = drmLayer->iFormat_;
+
+          if(drmLayer->iFormat_ == HAL_PIXEL_FORMAT_YUV420_8BIT_I){
+            src.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+          }else if(drmLayer->iFormat_ == HAL_PIXEL_FORMAT_YUV420_10BIT_I){
+            src.format = HAL_PIXEL_FORMAT_YCrCb_NV12_10;
+          }
+
+          // AFBC format
+          if(drmLayer->bAfbcd_)
+            src.rd_mode = IM_FBC_MODE;
+
+          // Set src rect info
+          src_rect.x = ALIGN_DOWN((int)drmLayer->source_crop.left,2);
+          src_rect.y = ALIGN_DOWN((int)drmLayer->source_crop.top,2);
+          src_rect.width  = ALIGN_DOWN((int)(drmLayer->source_crop.right  - drmLayer->source_crop.left),2);
+          src_rect.height = ALIGN_DOWN((int)(drmLayer->source_crop.bottom - drmLayer->source_crop.top),2);
+
+          // Set dst buffer info
+          dst.fd      = dst_buffer->GetFd();
+          dst.width   = dst_buffer->GetWidth();
+          dst.height  = dst_buffer->GetHeight();
+          // RGA 的特殊修改，需要通过 wstride
+          if(dst_buffer->GetFourccFormat() == DRM_FORMAT_NV15)
+            dst.wstride = dst_buffer->GetByteStride();
+          else
+            dst.wstride = dst_buffer->GetStride();
+
+          dst.hstride = dst_buffer->GetHeight();
+          dst.format  = dst_buffer->GetFormat();
+
+          // AFBC format
+          if(0)
+            dst.rd_mode = IM_FBC_MODE;
+
+          // Set dst rect info
+          dst_rect.x = 0;
+          dst_rect.y = 0;
+          dst_rect.width  = ALIGN_DOWN((int)(drmLayer->display_frame.right  - drmLayer->display_frame.left),2);
+          dst_rect.height = ALIGN_DOWN((int)(drmLayer->display_frame.bottom - drmLayer->display_frame.top),2);
+
+          // 处理旋转
+          int usage = 0;
+          switch(drmLayer->transform){
+          case DRM_MODE_ROTATE_0:
+            usage = 0;
+            break;
+          case DRM_MODE_ROTATE_0 | DRM_MODE_REFLECT_X :
+            usage = IM_HAL_TRANSFORM_FLIP_H;
+            break;
+          case DRM_MODE_ROTATE_0 | DRM_MODE_REFLECT_Y:
+            usage = IM_HAL_TRANSFORM_FLIP_V;
+            break;
+          case DRM_MODE_ROTATE_90:
+            usage = IM_HAL_TRANSFORM_ROT_90;
+            break;
+          case DRM_MODE_ROTATE_0 | DRM_MODE_REFLECT_X | DRM_MODE_REFLECT_Y:
+            usage = IM_HAL_TRANSFORM_ROT_180;
+            break;
+          case DRM_MODE_ROTATE_270:
+            usage = IM_HAL_TRANSFORM_ROT_270;
+            break;
+          case DRM_MODE_ROTATE_0 | DRM_MODE_REFLECT_X | DRM_MODE_ROTATE_90 :
+            usage = IM_HAL_TRANSFORM_FLIP_H | IM_HAL_TRANSFORM_ROT_90;
+            break;
+          case DRM_MODE_ROTATE_0 | DRM_MODE_REFLECT_Y | DRM_MODE_ROTATE_90:
+            usage = IM_HAL_TRANSFORM_FLIP_V | IM_HAL_TRANSFORM_ROT_90;
+            break;
+          default:
+            usage = 0;
+            ALOGE_IF(LogLevel(DBG_DEBUG),"Unknow sf transform 0x%x", drmLayer->transform);
+          }
+
+
+          IM_STATUS im_state;
+          // Call Im2d 格式转换
+          im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, &releaseFence, NULL, usage | IM_ASYNC);
+
+          if(im_state != IM_STATUS_SUCCESS){
+            HWC2_ALOGE("call im2d scale fail, %s",imStrError(im_state));
+            continue;
+          }
+
+          hwc_frect_t source_crop;
+          source_crop.left   = dst_rect.x;
+          source_crop.top    = dst_rect.y;
+          source_crop.right  = dst_rect.x + dst_rect.width;
+          source_crop.bottom = dst_rect.y + dst_rect.height;
+          drmLayer->UpdateAndStoreInfoFromDrmBuffer(dst_buffer->GetHandle(),
+                                                    dst_buffer->GetFd(),
+                                                    dst_buffer->GetFormat(),
+                                                    dst_buffer->GetWidth(),
+                                                    dst_buffer->GetHeight(),
+                                                    dst_buffer->GetStride(),
+                                                    dst_buffer->GetByteStride(),
+                                                    dst_buffer->GetSize(),
+                                                    dst_buffer->GetUsage(),
+                                                    dst_buffer->GetFourccFormat(),
+                                                    dst_buffer->GetModifier(),
+                                                    dst_buffer->GetName(),
+                                                    source_crop,
+                                                    dst_buffer->GetBufferId(),
+                                                    dst_buffer->GetGemHandle());
+          rga_layer_ready = true;
+          drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
+          drmLayer->pRgaBuffer_ = dst_buffer;
+          drmLayer->bUseRga_ = true;
+          break;
+        }else{
+          dst_buffer = rgaBufferQueue_->BackDrmBuffer();
+
+          if(dst_buffer == NULL){
+            HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
+            break;
+          }
+
+          hwc_frect_t source_crop;
+          source_crop.left  = drmLayer->display_frame.left;
+          source_crop.top   = drmLayer->display_frame.top;
+          source_crop.right = drmLayer->display_frame.right;
+          source_crop.bottom  = drmLayer->display_frame.bottom;
+          drmLayer->UpdateAndStoreInfoFromDrmBuffer(dst_buffer->GetHandle(),
+                                                    dst_buffer->GetFd(),
+                                                    dst_buffer->GetFormat(),
+                                                    dst_buffer->GetWidth(),
+                                                    dst_buffer->GetHeight(),
+                                                    dst_buffer->GetStride(),
+                                                    dst_buffer->GetByteStride(),
+                                                    dst_buffer->GetSize(),
+                                                    dst_buffer->GetUsage(),
+                                                    dst_buffer->GetFourccFormat(),
+                                                    dst_buffer->GetModifier(),
+                                                    dst_buffer->GetName(),
+                                                    source_crop,
+                                                    dst_buffer->GetBufferId(),
+                                                    dst_buffer->GetGemHandle());
+          use_laster_rga_layer = true;
+          drmLayer->bUseRga_ = true;
+          drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
+          drmLayer->pRgaBuffer_ = dst_buffer;
+          break;
+        }
+      }
+  }
+  if(rga_layer_ready){
+    ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d rga layer ready, to matchPlanes",__FUNCTION__,__LINE__);
+    int ret = 0;
+    if(ctx.request.iSkipCnt > 0){
+      ret = TryMixSkipPolicy(composition,layers,crtc,plane_groups);
+    }else{
+      ret = TryOverlayPolicy(composition,layers,crtc,plane_groups);
+      if(ret){
+        ret = TryMixVideoPolicy(composition,layers,crtc,plane_groups);
+      }
+    }
+    if(!ret){ // Match sucess, to call im2d interface
+      for(auto &drmLayer : layers){
+        if(drmLayer->bUseRga_){
+          dst_buffer->SetFinishFence(dup(releaseFence));
+          drmLayer->pRgaBuffer_ = dst_buffer;
+          drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(releaseFence));
+          rgaBufferQueue_->QueueBuffer(dst_buffer);
+          last_buffer_id = dst_buffer->GetBufferId();
+          return ret;
+        }
+      }
+      ResetLayerFromTmp(layers,tmp_layers);
+      return ret;
+    }else{ // Match fail, skip rga policy
+      HWC2_ALOGD_IF_DEBUG(" MatchPlanes fail! reset DrmHwcLayer.");
+      for(auto &drmLayer : layers){
+        if(drmLayer->bUseRga_){
+          rgaBufferQueue_->QueueBuffer(dst_buffer);
+          drmLayer->ResetInfoFromStore();
+          drmLayer->bUseSvep_ = false;
+        }
+      }
+      ResetLayerFromTmp(layers,tmp_layers);
+      return -1;
+    }
+  }else if(use_laster_rga_layer){
+    ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d rga layer ready, to matchPlanes",__FUNCTION__,__LINE__);
+    int ret = -1;
+    if(ctx.request.iSkipCnt > 0){
+      ret = TryMixSkipPolicy(composition,layers,crtc,plane_groups);
+    }else{
+      ret = TryOverlayPolicy(composition,layers,crtc,plane_groups);
+      if(ret){
+        ret = TryMixVideoPolicy(composition,layers,crtc,plane_groups);
+      }
+    }
+    if(!ret){ // Match sucess, to call im2d interface
+      HWC2_ALOGD_IF_DEBUG("Use last rga layer.");
+      return ret;
+    }
+  }
+  HWC2_ALOGD_IF_DEBUG("fail!, No layer use RGA policy.");
+  ResetLayerFromTmp(layers,tmp_layers);
+  return -1;
+}
+
 /*************************mix SidebandStream*************************
    DisplayId=0, Connector 345, Type = HDMI-A-1, Connector state = DRM_MODE_CONNECTED , frame_no = 6611
   ------+-----+-----------+-----------+--------------------+-------------+------------+--------------------------------+------------------------+------------+------------
@@ -1765,6 +2047,13 @@ int Vop3588::TryMixPolicy(
     if(!ret)
       return 0;
   }
+
+  if(ctx.state.setHwcPolicy.count(HWC_RGA_OVERLAY_LOPICY)){
+    ret = TryRgaOverlayPolicy(composition,layers,crtc,plane_groups);
+    if(!ret)
+      return 0;
+  }
+
   if(ctx.state.setHwcPolicy.count(HWC_MIX_UP_LOPICY)){
     ret = TryMixUpPolicy(composition,layers,crtc,plane_groups);
     if(!ret)
@@ -1776,6 +2065,13 @@ int Vop3588::TryMixPolicy(
     if(!ret)
       return 0;
   }
+
+  if(ctx.state.setHwcPolicy.count(HWC_MIX_DOWN_LOPICY)){
+    ret = TryMixDownPolicy(composition,layers,crtc,plane_groups);
+    if(!ret)
+      return 0;
+  }
+
   return -1;
 }
 
@@ -2170,8 +2466,8 @@ void Vop3588::InitStateContext(
       HWC2_ALOGD_IF_DEBUG("%s 4K 120 Mode.", mode.is_4k120p_mode() ? "Enter" : "Quit");
     }
     // Story Display Mode
-    ctx.state.iDisplayWidth_ = mode.v_display();
-    ctx.state.iDisplayHeight_ = mode.h_display();
+    ctx.state.iDisplayWidth_ = mode.h_display();
+    ctx.state.iDisplayHeight_ = mode.v_display();
 
     ctx.state.b8kMode_     = mode.is_8k_mode();
     ctx.state.b4k120pMode_ = mode.is_4k120p_mode();
@@ -2252,8 +2548,10 @@ bool Vop3588::TryOverlay(){
 void Vop3588::TryMix(){
   ctx.state.setHwcPolicy.insert(HWC_MIX_LOPICY);
   ctx.state.setHwcPolicy.insert(HWC_MIX_UP_LOPICY);
-  if(ctx.support.iYuvCnt > 0 || ctx.support.iAfbcdYuvCnt > 0)
+  if(ctx.support.iYuvCnt > 0 || ctx.support.iAfbcdYuvCnt > 0){
+    ctx.state.setHwcPolicy.insert(HWC_RGA_OVERLAY_LOPICY);
     ctx.state.setHwcPolicy.insert(HWC_MIX_VIDEO_LOPICY);
+  }
   if(ctx.request.iSkipCnt > 0)
     ctx.state.setHwcPolicy.insert(HWC_MIX_SKIP_LOPICY);
   if(ctx.request.bSidebandStreamMode)

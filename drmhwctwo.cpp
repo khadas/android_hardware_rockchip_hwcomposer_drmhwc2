@@ -1344,6 +1344,10 @@ int DrmHwcTwo::HwcDisplay::ImportBuffers() {
       if(drm_hwc_layer.bUseSvep_)
         continue;
 #endif
+      // 如果是超分处理后的图层，已经更新了GemHandle参数，则不再获取GemHandle
+      if(drm_hwc_layer.bUseRga_)
+        continue;
+
       if(drm_hwc_layer.uId_ == l.first){
         int ret = l.second.initOrGetGemhanleFromCache(&drm_hwc_layer);
         if (ret) {
@@ -2330,6 +2334,11 @@ int DrmHwcTwo::HwcDisplay::DumpAllLayerData(){
     for(auto &drm_layer : drm_hwc_layers_){
       if(drm_layer.bUseSvep_ && drm_layer.pSvepBuffer_){
         drm_layer.pSvepBuffer_->DumpData();
+      }
+    }
+    for(auto &drm_layer : drm_hwc_layers_){
+      if(drm_layer.bUseRga_ && drm_layer.pRgaBuffer_){
+        drm_layer.pRgaBuffer_->DumpData();
       }
     }
   }
