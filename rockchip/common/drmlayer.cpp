@@ -567,7 +567,7 @@ void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
   storeLayerInfo_.iStride_     = iStride_;
   storeLayerInfo_.iByteStride_ = iByteStride_;
   storeLayerInfo_.iSize_       = iSize_;
-  storeLayerInfo_.iUsage = iUsage;
+  storeLayerInfo_.iUsage       = iUsage;
   storeLayerInfo_.uFourccFormat_ = uFourccFormat_;
   storeLayerInfo_.uModifier_     = uModifier_;
   storeLayerInfo_.sLayerName_    = sLayerName_;

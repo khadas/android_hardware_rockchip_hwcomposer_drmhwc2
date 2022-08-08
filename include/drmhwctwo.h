@@ -303,6 +303,7 @@ class DrmHwcTwo : public hwc2_device_t {
 
     void set_output_buffer(buffer_handle_t buffer) {
       buffer_ = buffer;
+      mCurrentState.buffer_ = buffer;
 
       // Bufferinfo Cache
       uint64_t buffer_id;
@@ -383,6 +384,7 @@ class DrmHwcTwo : public hwc2_device_t {
             ALOGE("importBuffer stream=%p, tempHandle=%p fail, ret=%d",stream,tempHandle,ret);
           }
           sidebandStreamHandle_ = tempHandle;
+          mCurrentState.sidebandStreamHandle_ = tempHandle;
         }
       }
       // Bufferinfo Cache
