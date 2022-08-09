@@ -1316,6 +1316,7 @@ int Vop3588::TryRgaOverlayPolicy(
             continue;
           }
 
+          last_buffer_id = drmLayer->uBufferId_;
           hwc_frect_t source_crop;
           source_crop.left   = dst_rect.x;
           source_crop.top    = dst_rect.y;
@@ -1350,10 +1351,10 @@ int Vop3588::TryRgaOverlayPolicy(
           }
 
           hwc_frect_t source_crop;
-          source_crop.left  = drmLayer->display_frame.left;
-          source_crop.top   = drmLayer->display_frame.top;
-          source_crop.right = drmLayer->display_frame.right;
-          source_crop.bottom  = drmLayer->display_frame.bottom;
+          source_crop.left  = 0;
+          source_crop.top   = 0;
+          source_crop.right =   ALIGN_DOWN((int)(drmLayer->display_frame.right  - drmLayer->display_frame.left),2);
+          source_crop.bottom  = ALIGN_DOWN((int)(drmLayer->display_frame.bottom - drmLayer->display_frame.top),2);
           drmLayer->UpdateAndStoreInfoFromDrmBuffer(dst_buffer->GetHandle(),
                                                     dst_buffer->GetFd(),
                                                     dst_buffer->GetFormat(),
@@ -1395,7 +1396,6 @@ int Vop3588::TryRgaOverlayPolicy(
           drmLayer->pRgaBuffer_ = dst_buffer;
           drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(releaseFence));
           rgaBufferQueue_->QueueBuffer(dst_buffer);
-          last_buffer_id = dst_buffer->GetBufferId();
           return ret;
         }
       }
@@ -1407,7 +1407,7 @@ int Vop3588::TryRgaOverlayPolicy(
         if(drmLayer->bUseRga_){
           rgaBufferQueue_->QueueBuffer(dst_buffer);
           drmLayer->ResetInfoFromStore();
-          drmLayer->bUseSvep_ = false;
+          drmLayer->bUseRga_ = false;
         }
       }
       ResetLayerFromTmp(layers,tmp_layers);

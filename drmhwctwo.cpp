@@ -1321,7 +1321,7 @@ bool DrmHwcTwo::HwcDisplay::IsLayerStateChange() {
   if(is_state_change){
     return is_state_change;
   }else{
-    HWC2_ALOGD_IF_DEBUG("display=%d all LayerState no change skip Present! frame_no=%d",
+    HWC2_ALOGI("display=%d all LayerState no change skip Present! frame_no=%d",
         static_cast<int>(handle_), frame_no_);
   }
   return false;
@@ -1414,22 +1414,20 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition() {
   layers_map.emplace_back();
   DrmCompositionDisplayLayersMap &map = layers_map.back();
   map.display = static_cast<int>(handle_);
+
+  if(bDropFrame_){
+    for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_){
+        l.second.set_release_fence(l.second.back_release_fence());
+    }
+    d_retire_fence_.add(d_retire_fence_.get_back());
+    return HWC2::Error::None;
+  }
+
   // 若所有的图层状态与合成方式没有发生改变，则跳过此次 CreateComposition.
   if(!IsLayerStateChange()){
     return HWC2::Error::None;
   }else{
     map.geometry_changed = true;
-  }
-
-  if(handle_ > 0){
-    // if((frame_no_ % 2) == 1){
-    if(bDropFrame_){
-      for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_){
-          l.second.set_release_fence(l.second.back_release_fence());
-      }
-      d_retire_fence_.add(d_retire_fence_.get_back());
-      return HWC2::Error::None;
-    }
   }
 
   ret = ImportBuffers();
