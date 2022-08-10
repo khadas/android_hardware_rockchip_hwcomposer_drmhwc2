@@ -1178,6 +1178,20 @@ int Vop3588::TryRgaOverlayPolicy(
   std::shared_ptr<DrmBuffer> dst_buffer;
   static uint64_t last_buffer_id = 0;
   int releaseFence = -1;
+  rga_buffer_t src;
+  rga_buffer_t dst;
+  rga_buffer_t pat;
+  im_rect src_rect;
+  im_rect dst_rect;
+  im_rect pat_rect;
+  memset(&src, 0, sizeof(rga_buffer_t));
+  memset(&dst, 0, sizeof(rga_buffer_t));
+  memset(&pat, 0, sizeof(rga_buffer_t));
+  memset(&src_rect, 0, sizeof(im_rect));
+  memset(&dst_rect, 0, sizeof(im_rect));
+  memset(&pat_rect, 0, sizeof(im_rect));
+  int usage = 0;
+
   for(auto &drmLayer : layers){
     if(drmLayer->bYuv_){
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
@@ -1213,19 +1227,6 @@ int Vop3588::TryRgaOverlayPolicy(
             HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
             continue;
           }
-
-          rga_buffer_t src;
-          rga_buffer_t dst;
-          rga_buffer_t pat;
-          im_rect src_rect;
-          im_rect dst_rect;
-          im_rect pat_rect;
-          memset(&src, 0, sizeof(rga_buffer_t));
-          memset(&dst, 0, sizeof(rga_buffer_t));
-          memset(&pat, 0, sizeof(rga_buffer_t));
-          memset(&src_rect, 0, sizeof(im_rect));
-          memset(&dst_rect, 0, sizeof(im_rect));
-          memset(&pat_rect, 0, sizeof(im_rect));
 
           // Set src buffer info
           src.fd      = drmLayer->iFd_;
@@ -1275,7 +1276,6 @@ int Vop3588::TryRgaOverlayPolicy(
           dst_rect.height = ALIGN_DOWN((int)(drmLayer->display_frame.bottom - drmLayer->display_frame.top),2);
 
           // 处理旋转
-          int usage = 0;
           switch(drmLayer->transform){
           case DRM_MODE_ROTATE_0:
             usage = 0;
@@ -1309,14 +1309,12 @@ int Vop3588::TryRgaOverlayPolicy(
 
           IM_STATUS im_state;
           // Call Im2d 格式转换
-          im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, &releaseFence, NULL, usage | IM_ASYNC);
-
-          if(im_state != IM_STATUS_SUCCESS){
+          im_state = imcheck_t(src, dst, pat, src_rect, dst_rect, pat_rect, usage | IM_ASYNC);
+          if(im_state != IM_STATUS_NOERROR){
             HWC2_ALOGE("call im2d scale fail, %s",imStrError(im_state));
-            continue;
+            break;
           }
 
-          last_buffer_id = drmLayer->uBufferId_;
           hwc_frect_t source_crop;
           source_crop.left   = dst_rect.x;
           source_crop.top    = dst_rect.y;
@@ -1392,10 +1390,20 @@ int Vop3588::TryRgaOverlayPolicy(
     if(!ret){ // Match sucess, to call im2d interface
       for(auto &drmLayer : layers){
         if(drmLayer->bUseRga_){
+          IM_STATUS im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, &releaseFence, NULL, usage | IM_ASYNC);
+          if(im_state != IM_STATUS_SUCCESS){
+            HWC2_ALOGE("call im2d scale fail, %s",imStrError(im_state));
+            rgaBufferQueue_->QueueBuffer(dst_buffer);
+            drmLayer->ResetInfoFromStore();
+            drmLayer->bUseRga_ = false;
+            ret = -1;
+            break;
+          }
           dst_buffer->SetFinishFence(dup(releaseFence));
           drmLayer->pRgaBuffer_ = dst_buffer;
           drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(releaseFence));
           rgaBufferQueue_->QueueBuffer(dst_buffer);
+          last_buffer_id = drmLayer->uBufferId_;
           return ret;
         }
       }
