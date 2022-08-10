@@ -250,7 +250,7 @@ int DrmDisplayComposition::SignalCompositionDone() {
     HWC2_ALOGD_IF_DEBUG("Have been signal frame = %" PRIu64", not to signal.", frame_no_);
     return 0;
   }
-  HWC2_ALOGI("Will to signal frame = %" PRIu64,frame_no_);
+
   std::unordered_set<DrmHwcLayer *> comp_layers;
   for (const DrmCompositionPlane &plane : composition_planes_) {
     if (plane.type() == DrmCompositionPlane::Type::kLayer) {
@@ -275,17 +275,21 @@ int DrmDisplayComposition::SignalCompositionDone() {
       continue;
     }
     int act,sig;
-    act = layer->release_fence->getActiveCount();
-    sig = layer->release_fence->getSignaledCount();
+    if(LogLevel(DBG_DEBUG)){
+      act = layer->release_fence->getActiveCount();
+      sig = layer->release_fence->getSignaledCount();
+    }
 
     int ret = layer->release_fence->signal();
-      HWC2_ALOGI("Signal %s frame = %" PRIu64 " %s Info: size=%d act=%d signal=%d err=%d LayerName=%s BufferId=0x%" PRIx64 " SignalTime=%s" ,
+    if(LogLevel(DBG_DEBUG)){
+      HWC2_ALOGD_IF_DEBUG("Signal %s frame = %" PRIu64 " %s Info: size=%d act=%d signal=%d err=%d LayerName=%s BufferId=0x%" PRIx64 " SignalTime=%s" ,
                           act == 1 && sig == 0 && layer->release_fence->getActiveCount() == 0 && layer->release_fence->getSignaledCount() == 1 ? "Sucess" : "Fail",
                           frame_no_,layer->release_fence->getName().c_str(),layer->release_fence->getSize(),layer->release_fence->getActiveCount(),
                           layer->release_fence->getSignaledCount(),layer->release_fence->getErrorCount(),
                           layer->sLayerName_.c_str(),
                           layer->uBufferId_,
                           layer->release_fence->dump().c_str());
+    }
   }
   signal_ = true;
   return 0;

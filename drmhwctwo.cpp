@@ -2138,7 +2138,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
   ATRACE_CALL();
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 ,handle_);
 
-  DumpDisplayLayersInfo();
+  if(LogLevel(DBG_DEBUG))
+    DumpDisplayLayersInfo();
 
   // 虚拟屏
   if(isVirtual()){
@@ -2182,7 +2183,6 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
     return HWC2::Error::None;
   }
 
-
   // 统计所有图层信息, 判断是否为异显 Display
   bool is_unique_display = true;
   resource_manager_->ClearBufferId(handle_);
@@ -2196,16 +2196,10 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
     }
   }
 
-  if(is_unique_display){
-    HWC2_ALOGI("display-id=%" PRIu64 " is unique display.",handle_);
-  }
-
   bDropFrame_ = false;
-  // if((frame_no_ % 2) == 1){
   if(is_unique_display && compositor_->DropCurrentFrame(handle_, frame_no_)){
     bDropFrame_ = true;
-    ALOGI("display=%d drop frame_no=%d!",
-    static_cast<int>(handle_), frame_no_);
+    HWC2_ALOGD_IF_DEBUG("display=%d drop frame_no=%d!", static_cast<int>(handle_), frame_no_);
     for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_)
       l.second.set_validated_type(HWC2::Composition::Device);
     return HWC2::Error::None;
