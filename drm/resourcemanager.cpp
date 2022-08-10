@@ -135,6 +135,17 @@ DrmConnector *ResourceManager::AvailableWritebackConnector(int display) {
   return writeback_conn;
 }
 
+int ResourceManager::InitProperty() {
+  char property_value[PROPERTY_VALUE_MAX];
+  property_get("vendor.hwc.disble_drop_mode", property_value, "0");
+  mDropMode_ = atoi(property_value) != 0;
+
+  property_get("vendor.hwc.enable_dynamic_display_mode", property_value, "0");
+  mDynamicDisplayMode_ = atoi(property_value) > 0;
+
+  return 0;
+}
+
 DrmDevice *ResourceManager::GetDrmDevice(int display) {
   for (auto &drm : drms_) {
     if (drm->HandlesDisplay(display & ~DRM_CONNECTOR_SPILT_MODE_MASK))

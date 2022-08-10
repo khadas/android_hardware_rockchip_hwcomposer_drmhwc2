@@ -45,7 +45,7 @@ class ResourceManager {
   DrmDevice *GetDrmDevice(int display);
   std::shared_ptr<Importer> GetImporter(int display);
   DrmConnector *AvailableWritebackConnector(int display);
-
+  int InitProperty();
   const std::vector<std::unique_ptr<DrmDevice>> &GetDrmDevices() const {
     return drms_;
   }
@@ -102,6 +102,9 @@ class ResourceManager {
   int RemoveBufferId(int display, uint64_t buffer_id);
   bool IsUniqueBufferId(int display, uint64_t buffer_id);
 
+  // 系统属性开关
+  bool IsDropMode() const { return mDropMode_;}
+  bool IsDynamicDisplayMode() const { return mDynamicDisplayMode_;}
 
  private:
   ResourceManager();
@@ -136,6 +139,11 @@ class ResourceManager {
   std::shared_ptr<DrmBuffer> mFinishWriteBackBuffer_;
 
   std::map<int, std::set<uint64_t>> mMapDisplayBufferSet_;
+
+  // 关闭丢帧模式
+  bool mDropMode_;
+  // 使能动态分辨率切换模式
+  bool mDynamicDisplayMode_;
 
   mutable std::mutex mtx_;
 };

@@ -162,6 +162,9 @@ std::unique_ptr<DrmDisplayComposition> DrmDisplayCompositor::CreateComposition()
 
 static const int64_t kOneSecondNs = 1 * 1000 * 1000 * 1000;
 bool DrmDisplayCompositor::DropCurrentFrame(int display, int64_t frame_no) {
+  if(!resource_manager_->IsDropMode()){
+    return false;
+  }
 //   Primary fps
 //   DrmDevice *drm = resource_manager_->GetDrmDevice(0);
 //   DrmConnector *primary = drm->GetConnectorForDisplay(0);

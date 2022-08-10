@@ -1290,12 +1290,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidatePlanes() {
 }
 
 bool DrmHwcTwo::HwcDisplay::IsLayerStateChange() {
-
-  char value[PROPERTY_VALUE_MAX];
-  property_get("vendor.hwc.disble_layer_state_check", value, "0");
-
   bool is_state_change = false;
-  if(atoi(value) > 0){
+  if(!resource_manager_->IsDropMode()){
     is_state_change = true;
   }
 
@@ -3469,6 +3465,13 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
 }
 
 void DrmHwcTwo::DrmHotplugHandler::HandleResolutionSwitchEvent(int display_id) {
+
+  // 若系统没有设置为动态更新模式的话，则不进行分辨率更新
+  ResourceManager* rm = ResourceManager::getInstance();
+  if(!rm->IsDynamicDisplayMode()){
+    return;
+  }
+
   DrmConnector *connector = drm_->GetConnectorForDisplay(display_id);
   if (!connector) {
     ALOGE("Failed to get connector for display %d", display_id);
