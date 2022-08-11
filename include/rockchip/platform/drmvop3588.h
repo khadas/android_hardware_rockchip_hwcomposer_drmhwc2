@@ -150,6 +150,7 @@ typedef struct StateContext{
   bool bMultiAreaScaleEnable=false;
   bool bMultiAreaMode=false;
   bool bSmartScaleEnable=false;
+  bool bRgaPolicyEnable=false;
 
   // Video state
   bool bLargeVideo=false;

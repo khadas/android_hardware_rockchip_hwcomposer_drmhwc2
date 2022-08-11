@@ -56,6 +56,8 @@ void Vop3588::Init(){
 
   ctx.state.bMultiAreaScaleEnable = hwc_get_bool_property("vendor.hwc.multi_area_scale_mode","true");
 
+  ctx.state.bRgaPolicyEnable = hwc_get_int_property("vendor.hwc.enable_rga_policy","0") > 0;
+
 #ifdef USE_LIBSVEP
   if(svep_ == NULL){
     svep_ = Svep::Get(true);
@@ -1161,14 +1163,11 @@ int Vop3588::TryRgaOverlayPolicy(
     std::vector<DrmCompositionPlane> *composition,
     std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
     std::vector<PlaneGroup *> &plane_groups) {
-  ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
-  char value[PROPERTY_VALUE_MAX];
-  property_get("vendor.hwc.disable_rga_policy", value, "0");
-  if(atoi(value) > 0){
-    HWC2_ALOGD_IF_DEBUG("vendor.hwc.disable_rga_policy=%d skip policy.", atoi(value));
+  if(!ctx.state.bRgaPolicyEnable){
+    HWC2_ALOGD_IF_DEBUG("bRgaPolicyEnable=%d skip TryRgaOverlayPolicy", ctx.state.bRgaPolicyEnable);
     return -1;
   }
-
+  ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
   std::vector<DrmHwcLayer*> tmp_layers;
   ResetLayer(layers);
   ResetPlaneGroups(plane_groups);
@@ -1196,6 +1195,14 @@ int Vop3588::TryRgaOverlayPolicy(
     if(drmLayer->bYuv_){
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         if(last_buffer_id != drmLayer->uBufferId_){
+
+          // RGA 有缩放倍数限制
+          if((drmLayer->fHScaleMul_ < 0.125 &&
+              drmLayer->fHScaleMul_ > 8.0   &&
+              drmLayer->fVScaleMul_ < 0.125 &&
+              drmLayer->fVScaleMul_ > 8.0)){
+              break;
+          }
 
           bool yuv_10bit = false;
           switch(drmLayer->iFormat_){
