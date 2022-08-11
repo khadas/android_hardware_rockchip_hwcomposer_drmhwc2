@@ -2506,8 +2506,9 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
       // 视频缩小倍数*10，*10的原因是 vendor.hwc.hdr_video_area 为整型，不支持浮点数
       hdr_area_ratio = dis_area_size * 10 / src_area_size;
       int screen_size = ctx_.rel_xres * ctx_.rel_yres;
-      // 视频占屏幕面积*10，取缩小倍数与视频占用屏幕面积较小值
-      if(hdr_area_ratio > (dis_area_size * 10 / screen_size))
+      // 视频占屏幕面积*10，取缩小倍数与视频占用屏幕面积较大值，实现与操作
+      // 即需要同时满足视频缩小60%，屏占60%才关闭HDR模式
+      if(hdr_area_ratio < (dis_area_size * 10 / screen_size))
         hdr_area_ratio = dis_area_size * 10 / screen_size;
     }
   }
