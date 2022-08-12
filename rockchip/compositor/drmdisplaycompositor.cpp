@@ -986,6 +986,32 @@ int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
       out_log << " async_commit=" << sideband;
     }
 
+    if(crtc->variable_refresh_rate().id()) {
+      char value[PROPERTY_VALUE_MAX];
+      property_get("vendor.hwc.vrr_rate", value, "0");
+      int vrr_rate = 0;
+      vrr_rate = atoi(value);
+      static int last_vrr_rate = 0;
+      if(vrr_rate != last_vrr_rate && vrr_rate > 0){
+        last_vrr_rate = vrr_rate;
+        uint64_t min_refresh_rate = 0;
+        uint64_t max_refresh_rate = 0;
+        std::tie(ret, min_refresh_rate) = crtc->min_refresh_rate().value();
+        std::tie(ret, max_refresh_rate) = crtc->max_refresh_rate().value();
+        if(vrr_rate < min_refresh_rate) vrr_rate = min_refresh_rate;
+        if(vrr_rate > max_refresh_rate) vrr_rate = max_refresh_rate;
+        ret = drmModeAtomicAddProperty(pset, crtc->id(),
+                                      crtc->variable_refresh_rate().id(), vrr_rate) < 0;
+        if (ret) {
+          ALOGE("Failed to add variable_refresh_rate property %d to crtc %d",
+                crtc->variable_refresh_rate().id(), crtc->id());
+          break;
+        }
+        out_log << " vrr=" << vrr_rate;
+      }
+    }
+
+
     HWC2_ALOGD_IF_DEBUG("%s",out_log.str().c_str());
     out_log.clear();
   }

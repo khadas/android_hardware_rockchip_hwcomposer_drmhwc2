@@ -250,6 +250,33 @@ int DrmCrtc::Init() {
     std::tie(ret,b_can_next_hdr_) = feature_property_.value_bitmask("NEXT_HDR");
   }
 
+  int variable_refresh_rate = 0;
+  int max_refresh_rate = 0;
+  int min_refresh_rate = 0;
+  ret = drm_->GetCrtcProperty(*this, "variable refresh rate", &variable_refresh_rate_);
+  if (ret)
+    ALOGE("Could not get variable_refresh_rate property");
+  else{
+    std::tie(ret,variable_refresh_rate) = variable_refresh_rate_.value();
+  }
+  ret = drm_->GetCrtcProperty(*this, "max refresh rate", &max_refresh_rate_);
+  if (ret)
+    ALOGE("Could not get max_refresh_rate property");
+  else{
+    std::tie(ret,max_refresh_rate) = max_refresh_rate_.value();
+  }
+  ret = drm_->GetCrtcProperty(*this, "min refresh rate", &min_refresh_rate_);
+  if (ret)
+    ALOGE("Could not get min_refresh_rate_ property");
+  else{
+    std::tie(ret,min_refresh_rate) = min_refresh_rate_.value();
+  }
+
+  HWC2_ALOGI("crtc-id=%d vrr=%d, maxrr=%d minrr=%d",id_,
+                                         variable_refresh_rate,
+                                         max_refresh_rate,
+                                         min_refresh_rate);
+
   HWC2_ALOGD_IF_DEBUG("crtc-id=%d b_can_alpha_scale_=%d b_can_hdr10_=%d b_can_next_hdr_=%d",
     id_, b_can_alpha_scale_, b_can_hdr10_, b_can_next_hdr_);
   return 0;
@@ -325,6 +352,17 @@ const DrmProperty &DrmCrtc::cubic_lut_property() const{
 const DrmProperty &DrmCrtc::cubic_lut_size_property() const{
   return cubic_lut_size_property_;
 }
+
+const DrmProperty &DrmCrtc::variable_refresh_rate() const{
+  return variable_refresh_rate_;
+}
+const DrmProperty &DrmCrtc::max_refresh_rate() const{
+  return max_refresh_rate_;
+}
+const DrmProperty &DrmCrtc::min_refresh_rate() const{
+  return min_refresh_rate_;
+}
+
 bool DrmCrtc::get_afbc() const {
     return b_can_afbc_;
 }

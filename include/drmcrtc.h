@@ -70,6 +70,9 @@ class DrmCrtc {
   const DrmProperty &gamma_lut_size_property() const;
   const DrmProperty &cubic_lut_property() const;
   const DrmProperty &cubic_lut_size_property() const;
+  const DrmProperty &variable_refresh_rate() const;
+  const DrmProperty &max_refresh_rate() const;
+  const DrmProperty &min_refresh_rate() const;
 
  DrmDevice *getDrmDevice(){ return drm_; }
 
@@ -107,6 +110,9 @@ class DrmCrtc {
   DrmProperty gamma_lut_size_property_;
   DrmProperty cubic_lut_property_;
   DrmProperty cubic_lut_size_property_;
+  DrmProperty variable_refresh_rate_;
+  DrmProperty max_refresh_rate_;
+  DrmProperty min_refresh_rate_;
 
   /* Vop2 */
   uint32_t soc_id_;
