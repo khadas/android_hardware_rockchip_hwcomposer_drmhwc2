@@ -368,11 +368,11 @@ bool DrmHwcLayer::IsScale(hwc_frect_t &source_crop, hwc_rect_t &display_frame, i
         src_h = ALIGN_DOWN(src_h, 8);
         src_w = ALIGN_DOWN(src_w, 2);
     }
-    fHScaleMul_ = (float) (src_h)/(dst_w);
-    fVScaleMul_ = (float) (src_w)/(dst_h);
+    fHScaleMul_ = (src_h * 1.0)/(dst_w);
+    fVScaleMul_ =  (src_w * 1.0)/(dst_h);
   } else {
-    fHScaleMul_ = (float) (src_w)/(dst_w);
-    fVScaleMul_ = (float) (src_h)/(dst_h);
+    fHScaleMul_ = (src_w * 1.0)/(dst_w);
+    fVScaleMul_ = (src_h * 1.0)/(dst_h);
   }
   return (fHScaleMul_ != 1.0 ) || ( fVScaleMul_ != 1.0);
 }

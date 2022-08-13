@@ -1196,12 +1196,14 @@ int Vop3588::TryRgaOverlayPolicy(
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         if(last_buffer_id != drmLayer->uBufferId_){
 
+          bool rga_scale_max = false;
+          int  scale_max_rate = 4;
           // RGA 有缩放倍数限制
-          if((drmLayer->fHScaleMul_ < 0.125 &&
-              drmLayer->fHScaleMul_ > 8.0   &&
-              drmLayer->fVScaleMul_ < 0.125 &&
+          if((drmLayer->fHScaleMul_ < 0.125 ||
+              drmLayer->fHScaleMul_ > 8.0   ||
+              drmLayer->fVScaleMul_ < 0.125 ||
               drmLayer->fVScaleMul_ > 8.0)){
-              break;
+              rga_scale_max = true;
           }
 
           bool yuv_10bit = false;
@@ -1276,11 +1278,22 @@ int Vop3588::TryRgaOverlayPolicy(
           if(0)
             dst.rd_mode = IM_FBC_MODE;
 
-          // Set dst rect info
-          dst_rect.x = 0;
-          dst_rect.y = 0;
-          dst_rect.width  = ALIGN_DOWN((int)(drmLayer->display_frame.right  - drmLayer->display_frame.left),2);
-          dst_rect.height = ALIGN_DOWN((int)(drmLayer->display_frame.bottom - drmLayer->display_frame.top),2);
+          // 若缩放倍数超出RGA最大缩小倍数，则进行二次缩放，倍率设置为6
+          if(rga_scale_max){
+            // Set dst rect info
+            dst_rect.x = 0;
+            dst_rect.y = 0;
+            dst_rect.width  = ALIGN_DOWN((int)(drmLayer->source_crop.right
+                                                - drmLayer->source_crop.left) / scale_max_rate,2);
+            dst_rect.height = ALIGN_DOWN((int)(drmLayer->source_crop.bottom
+                                                - drmLayer->source_crop.top) / scale_max_rate,2);
+          }else{
+            // Set dst rect info
+            dst_rect.x = 0;
+            dst_rect.y = 0;
+            dst_rect.width  = ALIGN_DOWN((int)(drmLayer->display_frame.right  - drmLayer->display_frame.left),2);
+            dst_rect.height = ALIGN_DOWN((int)(drmLayer->display_frame.bottom - drmLayer->display_frame.top),2);
+          }
 
           // 处理旋转
           switch(drmLayer->transform){
