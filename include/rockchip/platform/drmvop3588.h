@@ -291,14 +291,24 @@ typedef struct DrmVop2Context{
     class SvepBufferSlot {
         public:
             SvepBufferSlot()
-              : mBufferSlot_({NULL, NULL, NULL}) {}
+              : mBufferSlot_({NULL, NULL}) {}
 
             void Add(std::shared_ptr<DrmBuffer> buffer) {
                 mBufferSlot_.push(buffer);
                 mBufferSlot_.pop();
+                mGetFrontCnt_ = 0;
             }
 
             const std::shared_ptr<DrmBuffer> &Get() const {
+                return mBufferSlot_.front();
+            }
+
+            const std::shared_ptr<DrmBuffer> &GetFrontAndAdd() {
+                mGetFrontCnt_++;
+                if(mGetFrontCnt_ > mBufferSlot_.size()){
+                  auto &buffer = mBufferSlot_.back();
+                  Add(buffer);
+                }
                 return mBufferSlot_.front();
             }
 
@@ -308,6 +318,7 @@ typedef struct DrmVop2Context{
         private:
             // There are always two fences in this queue.
             std::queue<std::shared_ptr<DrmBuffer>> mBufferSlot_;
+            int mGetFrontCnt_ = 0;
     };
     SvepBufferSlot mSvepBufferSlot_;
 #endif

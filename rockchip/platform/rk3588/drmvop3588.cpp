@@ -1782,7 +1782,12 @@ int Vop3588::TrySvepPolicy(
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
           break;
         }else{
-          std::shared_ptr<DrmBuffer> output_buffer = mSvepBufferSlot_.Get();
+          std::shared_ptr<DrmBuffer> output_buffer = NULL;
+          if(contrast_offset != 0){
+             output_buffer = mSvepBufferSlot_.GetFrontAndAdd();
+          }else{
+             output_buffer = mSvepBufferSlot_.Get();
+          }
           if(output_buffer == NULL){
             HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
             break;

@@ -2593,7 +2593,7 @@ int DrmHwcTwo::HwcDisplay::SelfRefreshEnable(){
 #endif
   }
   if(enable_self_refresh){
-    InvalidateControl(10,-1);
+    InvalidateControl(30,-1);
   }
   return 0 ;
 }
