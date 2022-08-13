@@ -2608,7 +2608,7 @@ int Vop3588::InitContext(
   int iSvepMode = hwc_get_int_property(SVEP_MODE_NAME,"0");
   // Match policy first
   HWC2_ALOGD_IF_DEBUG("%s=%d bSvepReady_=%d",SVEP_MODE_NAME, iSvepMode, bSvepReady_);
-  if(iSvepMode == 1){
+  if(iSvepMode > 0){
     DrmDevice *drm = crtc->getDrmDevice();
     DrmConnector *conn = drm->GetConnectorForDisplay(crtc->display());
     if(conn && conn->state() == DRM_MODE_CONNECTED &&
@@ -2616,13 +2616,6 @@ int Vop3588::InitContext(
       // Match policy first
       TrySvepOverlay();
     }
-  }else if(iSvepMode == 2){
-    ctx.state.setHwcPolicy.insert(HWC_GLES_POLICY);
-    HWC2_ALOGD_IF_DEBUG("Force use GLES compose, %s=%d , soc_id=%x",
-                                                                    SVEP_MODE_NAME,
-                                                                    iSvepMode,
-                                                                    ctx.state.iSocId);
-    return 0;
   }
 #endif
 
