@@ -290,8 +290,9 @@ bool DrmMode::is_8k_mode() const {
 bool DrmMode::is_4k120p_mode() const {
   // 4K 120帧 AFBC图层取数/解码存在性能问题
   // 故需要特殊判断
-  // 目前判断的边界设置为 115,主要为了覆盖119.xx刷新率
-  if(v_refresh() > 115){
+  // 目前判断的边界设置为 90,主要为了覆盖119.xx刷新率
+  // 20220813 发现目前 4K90帧也存在性能问题，故设置为90
+  if(v_refresh() > 90){
     if( h_display_ >= 2160 ){
       return true;
     }
