@@ -288,6 +288,28 @@ typedef struct DrmVop2Context{
   bool bSvepReady_;
   SvepContext svepCtx_;
   std::shared_ptr<DrmBufferQueue> bufferQueue_;
+    class SvepBufferSlot {
+        public:
+            SvepBufferSlot()
+              : mBufferSlot_({NULL, NULL, NULL}) {}
+
+            void Add(std::shared_ptr<DrmBuffer> buffer) {
+                mBufferSlot_.push(buffer);
+                mBufferSlot_.pop();
+            }
+
+            const std::shared_ptr<DrmBuffer> &Get() const {
+                return mBufferSlot_.front();
+            }
+
+            int Size() const {
+                return mBufferSlot_.size();
+            }
+        private:
+            // There are always two fences in this queue.
+            std::queue<std::shared_ptr<DrmBuffer>> mBufferSlot_;
+    };
+    SvepBufferSlot mSvepBufferSlot_;
 #endif
 };
 

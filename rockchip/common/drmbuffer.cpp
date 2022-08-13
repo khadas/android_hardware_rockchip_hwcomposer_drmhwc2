@@ -45,8 +45,9 @@ static uint64_t getUniqueId() {
 #define RK_GRALLOC_USAGE_STRIDE_ALIGN_16 (1ULL << 57)
 #endif
 
-DrmBuffer::DrmBuffer(int w, int h, int format, uint64_t usage, std::string name):
+DrmBuffer::DrmBuffer(int w, int h, int format, uint64_t usage, std::string name, int parent_id):
   uId(getUniqueId()),
+  iParentId_(parent_id),
   iFd_(-1),
   iWidth_(w),
   iHeight_(h),
@@ -137,6 +138,13 @@ std::string DrmBuffer::GetName(){
 uint64_t DrmBuffer::GetId(){
   return uId;
 }
+int DrmBuffer::GetParentId(){
+  return iParentId_;
+}
+int DrmBuffer::SetParentId(int parent_id){
+  iParentId_ = parent_id;
+  return 0;
+}
 int DrmBuffer::GetFd(){
   return iFd_;
 }
@@ -160,6 +168,21 @@ int DrmBuffer::GetSize(){
 }
 int DrmBuffer::GetUsage(){
   return iUsage_;
+}
+int DrmBuffer::SetCrop(int left, int top, int right, int bottom){
+  iLeft_  = left;
+  iTop_   = top;
+  iRight_ = right;
+  iBottom_  = bottom;
+  return 0;
+}
+
+int DrmBuffer::GetCrop(int *left, int *top, int *right, int *bottom){
+  *left   = iLeft_;
+  *top    = iTop_;
+  *right  = iRight_;
+  *bottom = iBottom_;
+  return 0;
 }
 uint32_t DrmBuffer::GetFourccFormat(){
   return uFourccFormat_;
@@ -280,8 +303,8 @@ int DrmBuffer::Unlock(){
   return ret;
 }
 
-UniqueFd DrmBuffer::GetFinishFence(){
-  return dup(iFinishFence_.get());
+int DrmBuffer::GetFinishFence(){
+  return iFinishFence_.Dup();
 }
 
 int DrmBuffer::SetFinishFence(int fence){
@@ -304,8 +327,8 @@ int DrmBuffer::WaitFinishFence(){
   return ret;
 }
 
-UniqueFd DrmBuffer::GetReleaseFence(){
-  return iReleaseFence_.Release();
+int DrmBuffer::GetReleaseFence(){
+  return iReleaseFence_.Dup();
 }
 
 int DrmBuffer::SetReleaseFence(int fence){

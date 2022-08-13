@@ -26,12 +26,14 @@ namespace android {
 
 class DrmBuffer{
 public:
-  DrmBuffer(int w, int h, int format, uint64_t usage = 0, std::string sName_ = "unset");
+  DrmBuffer(int w, int h, int format, uint64_t usage = 0, std::string sName_ = "unset", int parent_id = 0);
   ~DrmBuffer();
   int Init();
   bool initCheck();
   buffer_handle_t GetHandle();
   uint64_t GetId();
+  int GetParentId();
+  int SetParentId(int parent_id);
   int GetFd();
   std::string GetName();
   int GetWidth();
@@ -41,6 +43,8 @@ public:
   int GetByteStride();
   int GetSize();
   int GetUsage();
+  int SetCrop(int left, int top, int right, int bottom);
+  int GetCrop(int *left, int *top, int *right, int *bottom);
   uint32_t GetFourccFormat();
   uint64_t GetModifier();
   uint64_t GetBufferId();
@@ -49,16 +53,17 @@ public:
   uint32_t GetFbId();
   void* Lock();
   int Unlock();
-  UniqueFd GetFinishFence();
+  int GetFinishFence();
   int SetFinishFence(int fence);
   int WaitFinishFence();
-  UniqueFd GetReleaseFence();
+  int GetReleaseFence();
   int SetReleaseFence(int fence);
   int WaitReleaseFence();
   int DumpData();
 
 private:
   uint64_t uId;
+  int iParentId_;
   // BufferInfo
   int iFd_;
   int iWidth_;
@@ -73,9 +78,17 @@ private:
   uint64_t uBufferId_;
   uint32_t uGemHandle_;
   uint32_t uFbId_;
+
+  // rect crop info
+  int iLeft_;
+  int iTop_;
+  int iRight_;
+  int iBottom_;
+
   // Fence info
   UniqueFd iFinishFence_;
   UniqueFd iReleaseFence_;
+
   // Init flags
   bool bInit_;
   std::string sName_;

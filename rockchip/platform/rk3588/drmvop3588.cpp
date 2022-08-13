@@ -1699,7 +1699,8 @@ int Vop3588::TrySvepPolicy(
                                                         require.mBufferInfo_.iHeight_,
                                                         require.mBufferInfo_.iFormat_,
                                                         RK_GRALLOC_USAGE_STRIDE_ALIGN_64,
-                                                        "SVEP-SurfaceView");
+                                                        "SVEP-SurfaceView",
+                                                        drmLayer->uId_);
 
           if(dst_buffer == NULL){
             HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
@@ -1744,6 +1745,10 @@ int Vop3588::TrySvepPolicy(
           source_crop.top    = require.mCrop_.iTop_;
           source_crop.right  = require.mCrop_.iRight_;
           source_crop.bottom = require.mCrop_.iBottom_;
+          dst_buffer->SetCrop(require.mCrop_.iLeft_,
+                              require.mCrop_.iTop_,
+                              require.mCrop_.iRight_,
+                              require.mCrop_.iBottom_);
           drmLayer->UpdateAndStoreInfoFromDrmBuffer(dst_buffer->GetHandle(),
                                                     dst_buffer->GetFd(),
                                                     dst_buffer->GetFormat(),
@@ -1764,37 +1769,41 @@ int Vop3588::TrySvepPolicy(
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
           break;
         }else{
-          dst_buffer = bufferQueue_->BackDrmBuffer();
-
-          if(dst_buffer == NULL){
+          std::shared_ptr<DrmBuffer> output_buffer = mSvepBufferSlot_.Get();
+          if(output_buffer == NULL){
             HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
             break;
           }
-
+          int left = 0, top = 0, right = 0, bottom = 0;
+          output_buffer->GetCrop(&left,
+                              &top,
+                              &right,
+                              &bottom);
           hwc_frect_t source_crop;
-          source_crop.left   = svepCtx_.mDst_.mCrop_.iLeft_;
-          source_crop.top    = svepCtx_.mDst_.mCrop_.iTop_;
-          source_crop.right  = svepCtx_.mDst_.mCrop_.iRight_;
-          source_crop.bottom = svepCtx_.mDst_.mCrop_.iBottom_;
-          drmLayer->UpdateAndStoreInfoFromDrmBuffer(dst_buffer->GetHandle(),
-                                                    dst_buffer->GetFd(),
-                                                    dst_buffer->GetFormat(),
-                                                    dst_buffer->GetWidth(),
-                                                    dst_buffer->GetHeight(),
-                                                    dst_buffer->GetStride(),
-                                                    dst_buffer->GetByteStride(),
-                                                    dst_buffer->GetSize(),
-                                                    dst_buffer->GetUsage(),
-                                                    dst_buffer->GetFourccFormat(),
-                                                    dst_buffer->GetModifier(),
-                                                    dst_buffer->GetName(),
+          source_crop.left   = left;
+          source_crop.top    = top;
+          source_crop.right  = right;
+          source_crop.bottom = bottom;
+          drmLayer->UpdateAndStoreInfoFromDrmBuffer(output_buffer->GetHandle(),
+                                                    output_buffer->GetFd(),
+                                                    output_buffer->GetFormat(),
+                                                    output_buffer->GetWidth(),
+                                                    output_buffer->GetHeight(),
+                                                    output_buffer->GetStride(),
+                                                    output_buffer->GetByteStride(),
+                                                    output_buffer->GetSize(),
+                                                    output_buffer->GetUsage(),
+                                                    output_buffer->GetFourccFormat(),
+                                                    output_buffer->GetModifier(),
+                                                    output_buffer->GetName(),
                                                     source_crop,
-                                                    dst_buffer->GetBufferId(),
-                                                    dst_buffer->GetGemHandle());
+                                                    output_buffer->GetBufferId(),
+                                                    output_buffer->GetGemHandle());
           use_laster_rga_layer = true;
           drmLayer->bUseSvep_ = true;
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
-          drmLayer->pSvepBuffer_ = dst_buffer;
+          drmLayer->pSvepBuffer_ = output_buffer;
+          drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(output_buffer->GetFinishFence()));
           break;
         }
       }
@@ -1819,15 +1828,61 @@ int Vop3588::TrySvepPolicy(
             HWC2_ALOGD_IF_DEBUG("RunAsync fail!");
             drmLayer->bUseSvep_ = false;
           }
-          dst_buffer->SetFinishFence(dup(output_fence));
-          drmLayer->pSvepBuffer_ = dst_buffer;
-          drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(output_fence));
-          bufferQueue_->QueueBuffer(dst_buffer);
           last_buffer_id = svepCtx_.mSrc_.mBufferInfo_.uBufferId_;
           last_svep_mode = svep_mode;
           last_contrast_mode = contrast_mode;
           last_enhancement_rate = enhancement_rate;
           last_contrast_offset = contrast_offset;
+          dst_buffer->SetFinishFence(output_fence);
+          bufferQueue_->QueueBuffer(dst_buffer);
+
+          mSvepBufferSlot_.Add(dst_buffer);
+          std::shared_ptr<DrmBuffer> output_buffer = mSvepBufferSlot_.Get();
+          if(output_buffer == NULL){
+              for(int i = 0; i < mSvepBufferSlot_.Size(); i++){
+                mSvepBufferSlot_.Add(dst_buffer);
+                output_buffer = mSvepBufferSlot_.Get();
+                if(output_buffer != NULL){
+                  break;
+                }
+              }
+          }else if(output_buffer->GetParentId() != drmLayer->uId_){
+            for(int i = 0; i < mSvepBufferSlot_.Size(); i++){
+              mSvepBufferSlot_.Add(dst_buffer);
+              output_buffer = mSvepBufferSlot_.Get();
+              if(output_buffer->GetParentId() == drmLayer->uId_){
+                break;
+              }
+            }
+          }
+          drmLayer->pSvepBuffer_ = output_buffer;
+          drmLayer->ResetInfoFromStore();
+          int left = 0, top = 0, right = 0, bottom = 0;
+          output_buffer->GetCrop(&left,
+                               &top,
+                               &right,
+                               &bottom);
+          hwc_frect_t source_crop;
+          source_crop.left   = left;
+          source_crop.top    = top;
+          source_crop.right  = right;
+          source_crop.bottom = bottom;
+          drmLayer->UpdateAndStoreInfoFromDrmBuffer(output_buffer->GetHandle(),
+                                                    output_buffer->GetFd(),
+                                                    output_buffer->GetFormat(),
+                                                    output_buffer->GetWidth(),
+                                                    output_buffer->GetHeight(),
+                                                    output_buffer->GetStride(),
+                                                    output_buffer->GetByteStride(),
+                                                    output_buffer->GetSize(),
+                                                    output_buffer->GetUsage(),
+                                                    output_buffer->GetFourccFormat(),
+                                                    output_buffer->GetModifier(),
+                                                    output_buffer->GetName(),
+                                                    source_crop,
+                                                    output_buffer->GetBufferId(),
+                                                    output_buffer->GetGemHandle());
+          drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(output_buffer->GetFinishFence()));
           return ret;
         }
       }

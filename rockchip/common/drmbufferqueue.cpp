@@ -26,7 +26,7 @@ namespace android{
 
 DrmBufferQueue::DrmBufferQueue():
   sName_(""),
-  iMaxBufferSize_(DrmBufferQeueueMaxSize),
+  iMaxBufferSize_(DRM_BUFFERQUEUE_MAX_SIZE),
   currentBuffer_(NULL){
 }
 
@@ -34,6 +34,7 @@ DrmBufferQueue::~DrmBufferQueue(){
   while(bufferQueue_.size() > 0){
     bufferQueue_.pop();
   }
+  currentBuffer_ = NULL;
 }
 
 bool DrmBufferQueue::NeedsReallocation(int w, int h, int format){
@@ -71,13 +72,18 @@ std::shared_ptr<DrmBuffer> DrmBufferQueue::BackDrmBuffer(){
   return NULL;
 }
 
-std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w, int h, int format, uint64_t usage, std::string name){
+std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w,
+                                                            int h,
+                                                            int format,
+                                                            uint64_t usage,
+                                                            std::string name,
+                                                            int parent_id){
   HWC2_ALOGD_IF_DEBUG("w=%d, h=%d, format=%d usage=0x%" PRIu64 " name=%s",w, h, format, usage, name.c_str());
   if(bufferQueue_.size() == iMaxBufferSize_){
     currentBuffer_ = bufferQueue_.front();
     bufferQueue_.pop();
     if(NeedsReallocation(w, h, format)){
-      currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, usage, name);
+      currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, usage, name, parent_id);
       if(currentBuffer_->Init()){
         HWC2_ALOGE("DrmBuffer Init fail, w=%d h=%d format=%d name=%s",
                    w, h, format, name.c_str());
@@ -88,11 +94,12 @@ std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w, int h, int fo
     }
     currentBuffer_->WaitReleaseFence();
     currentBuffer_->WaitFinishFence();
+    currentBuffer_->SetParentId(parent_id);
     HWC2_ALOGD_IF_DEBUG("Id=%" PRIu64 " fd=%d Buffer=%p, queue.size()=%zu, dequeue success!",
       currentBuffer_->GetId(),currentBuffer_->GetFd(),currentBuffer_.get(),bufferQueue_.size());
     return currentBuffer_;
   }else{
-    currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, usage, name);
+    currentBuffer_ = std::make_shared<DrmBuffer>(w, h, format, usage, name, parent_id);
     if(currentBuffer_->Init()){
       HWC2_ALOGE("DrmBuffer Init fail, w=%d h=%d format=%d name=%s",
                  w, h, format, name.c_str());
@@ -111,7 +118,6 @@ int DrmBufferQueue::QueueBuffer(const std::shared_ptr<DrmBuffer> buffer){
       HWC2_ALOGD_IF_DEBUG("Id=%" PRIu64 " fd=%d Buffer=%p , queue.size()=%zu, queue success!",buffer->GetId(),
         currentBuffer_->GetFd(), buffer.get(),bufferQueue_.size());
       bufferQueue_.push(currentBuffer_);
-      currentBuffer_ = NULL;
       return 0;
     }
   }
@@ -119,6 +125,5 @@ int DrmBufferQueue::QueueBuffer(const std::shared_ptr<DrmBuffer> buffer){
                  buffer->GetId(), currentBuffer_->GetFd(), currentBuffer_.get(), buffer.get(),bufferQueue_.size(), sName_.c_str());
   return -1;
 }
-
 }//namespace android
 
