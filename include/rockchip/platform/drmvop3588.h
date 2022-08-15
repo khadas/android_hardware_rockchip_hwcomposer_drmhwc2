@@ -312,6 +312,12 @@ typedef struct DrmVop2Context{
                 return mBufferSlot_.front();
             }
 
+            void Clear() {
+                for(int i = 0; i <= mBufferSlot_.size(); i++){
+                  Add(NULL);
+                }
+                return;
+            }
             int Size() const {
                 return mBufferSlot_.size();
             }

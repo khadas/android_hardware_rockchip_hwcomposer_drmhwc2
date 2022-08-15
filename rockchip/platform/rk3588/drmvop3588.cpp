@@ -1623,6 +1623,27 @@ int Vop3588::TrySvepPolicy(
   ResetPlaneGroups(plane_groups);
   //save fb into tmp_layers
 
+  char value[PROPERTY_VALUE_MAX];
+  int svep_mode = hwc_get_int_property(SVEP_MODE_NAME,"0");
+  bool use_svep = false;
+  // Match policy first
+  HWC2_ALOGD_IF_DEBUG("%s=%d bSvepReady_=%d",SVEP_MODE_NAME, svep_mode, bSvepReady_);
+  if(svep_mode > 0){
+    DrmDevice *drm = crtc->getDrmDevice();
+    DrmConnector *conn = drm->GetConnectorForDisplay(crtc->display());
+    // 只有主屏可以享受视频 SVEP 效果
+    if(conn && conn->state() == DRM_MODE_CONNECTED &&
+        conn->display() == 0){
+      // Match policy first
+      use_svep = true;
+    }
+  }
+  static int last_svep_mode = 0;
+  if(!use_svep){
+    last_svep_mode = use_svep;
+    return -1;
+  }
+
   // 0. SVEP模块初始化
   if(svep_ == NULL){
     svep_ = Svep::Get(true);
@@ -1637,9 +1658,6 @@ int Vop3588::TrySvepPolicy(
   std::shared_ptr<DrmBuffer> dst_buffer;
 
   // 以下参数更新后需要强制触发svep处理更新图像数据
-  char value[PROPERTY_VALUE_MAX];
-  property_get(SVEP_MODE_NAME, value, "0");
-  int svep_mode = atoi(value);
   property_get(SVEP_ENHANCEMENT_RATE_NAME, value, "5");
   int enhancement_rate = atoi(value);
   property_get(SVEP_CONTRAST_MODE_NAME, value, "0");
@@ -1647,14 +1665,13 @@ int Vop3588::TrySvepPolicy(
   property_get(SVEP_CONTRAST_MODE_OFFSET, value, "50");
   int contrast_offset = atoi(value);
   static uint64_t last_buffer_id = 0;
-  static int last_svep_mode = 0;
   static int last_enhancement_rate = 0;
   static int last_contrast_mode = 0;
   static int last_contrast_offset = 0;
 
   for(auto &drmLayer : layers){
     if(drmLayer->iWidth_ <= 4096 &&
-       (drmLayer->bYuv_ || strstr(drmLayer->sLayerName_.c_str(), "SurfaceView"))){
+       (drmLayer->bYuv_)){
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         // 部分参数变化后需要强制更新
         if(last_svep_mode != svep_mode ||
@@ -1847,6 +1864,10 @@ int Vop3588::TrySvepPolicy(
             drmLayer->bUseSvep_ = false;
           }
           last_buffer_id = svepCtx_.mSrc_.mBufferInfo_.uBufferId_;
+          // 若超分前后模式切换，则清理叼早期超分的数据
+          if(last_svep_mode != svep_mode){
+            mSvepBufferSlot_.Clear();
+          }
           last_svep_mode = svep_mode;
           last_contrast_mode = contrast_mode;
           last_enhancement_rate = enhancement_rate;
@@ -2678,18 +2699,7 @@ int Vop3588::InitContext(
           __FUNCTION__,__LINE__);
 
 #ifdef USE_LIBSVEP
-  int iSvepMode = hwc_get_int_property(SVEP_MODE_NAME,"0");
-  // Match policy first
-  HWC2_ALOGD_IF_DEBUG("%s=%d bSvepReady_=%d",SVEP_MODE_NAME, iSvepMode, bSvepReady_);
-  if(iSvepMode > 0){
-    DrmDevice *drm = crtc->getDrmDevice();
-    DrmConnector *conn = drm->GetConnectorForDisplay(crtc->display());
-    if(conn && conn->state() == DRM_MODE_CONNECTED &&
-        conn->type() == DRM_MODE_CONNECTOR_HDMIA && conn->type_id() == 1){
-      // Match policy first
-      TrySvepOverlay();
-    }
-  }
+  TrySvepOverlay();
 #endif
 
   if(!TryOverlay())
