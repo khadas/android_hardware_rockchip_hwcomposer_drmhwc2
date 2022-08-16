@@ -99,7 +99,8 @@ class DrmDisplayCompositor {
   int CommitSidebandStream(drmModeAtomicReqPtr pset,
                            DrmPlane* plane,
                            DrmHwcLayer &layer,
-                           int zpos);
+                           int zpos,
+                           int crtc_id);
   int CommitFrame(DrmDisplayComposition *display_comp,
                   bool test_only,
                   DrmConnector *writeback_conn = NULL,

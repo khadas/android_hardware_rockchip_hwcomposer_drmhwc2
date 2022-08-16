@@ -504,7 +504,8 @@ int DrmDisplayCompositor::SyntheticWaitVBlank() {
 int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
                                                DrmPlane* plane,
                                                DrmHwcLayer &layer,
-                                               int zpos){
+                                               int zpos,
+                                               int crtc_id){
   uint16_t eotf       = TRADITIONAL_GAMMA_SDR;
   uint32_t colorspace = V4L2_COLORSPACE_DEFAULT;
   bool     afbcd      = layer.bAfbcd_;
@@ -521,21 +522,22 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
   eotf                = layer.uEOTF;
   colorspace          = layer.uColorSpace;
 
-  static char last_prop[100] = {0};
-  char prop[100] = {0};
-  sprintf(prop, "%d-%d-%d-%d-%d-%d-%d-%d", \
-      (int)layer.source_crop.left,\
-      (int)layer.source_crop.top,\
-      (int)layer.source_crop.right,\
-      (int)layer.source_crop.bottom,\
-      layer.display_frame.left,\
-      layer.display_frame.top,\
-      layer.display_frame.right,\
-      layer.display_frame.bottom);
-  if(strcmp(prop,last_prop)){
-    property_set("vendor.hwc.sideband.crop", prop);
-    strncpy(last_prop, prop, sizeof(last_prop));
-  }
+  // TvInput 暂时不需要这个属性，20220816
+  // static char last_prop[100] = {0};
+  // char prop[100] = {0};
+  // sprintf(prop, "%d-%d-%d-%d-%d-%d-%d-%d", \
+  //     (int)layer.source_crop.left,\
+  //     (int)layer.source_crop.top,\
+  //     (int)layer.source_crop.right,\
+  //     (int)layer.source_crop.bottom,\
+  //     layer.display_frame.left,\
+  //     layer.display_frame.top,\
+  //     layer.display_frame.right,\
+  //     layer.display_frame.bottom);
+  // if(strcmp(prop,last_prop)){
+  //   property_set("vendor.hwc.sideband.crop", prop);
+  //   strncpy(last_prop, prop, sizeof(last_prop));
+  // }
 
   if (plane->blend_property().id()) {
     switch (layer.blending) {
@@ -562,7 +564,7 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
   if(plane->async_commit_property().id()) {
     ret = drmModeAtomicAddProperty(pset, plane->id(),
                                   plane->async_commit_property().id(),
-                                  sideband == true ? 1 : 0) < 0;
+                                  sideband == true ? crtc_id : 0) < 0;
     if (ret) {
       ALOGE("Failed to add async_commit_property property %d to plane %d",
             plane->async_commit_property().id(), plane->id());
@@ -625,7 +627,8 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
     }
   }
 
-  HWC2_ALOGD_IF_INFO("SidebandStreamLayer zpos=%d not to commit frame.", zpos);
+  HWC2_ALOGD_IF_INFO("SidebandStreamLayer plane-id=%d name=%s zpos=%d crtc-id=%d not to commit frame.",
+                      plane->id(), plane->name(),zpos, crtc_id);
   return 0;
 }
 
@@ -798,7 +801,7 @@ int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
 
       sideband = layer.bSidebandStreamLayer_;
       if(sideband){
-        ret = CommitSidebandStream(pset, plane, layer, zpos);
+        ret = CommitSidebandStream(pset, plane, layer, zpos, crtc->id());
         if(ret){
           HWC2_ALOGE("CommitSidebandStream fail");
         }
