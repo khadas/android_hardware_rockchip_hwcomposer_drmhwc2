@@ -297,24 +297,28 @@ int DrmDevice::UpdateInfoFromXml(){
 
 void DrmDevice::InitResevedPlane(){
   // Reserved DrmPlane
-  char reserved_plane_name[PROPERTY_VALUE_MAX] = {0};
-  hwc_get_string_property("vendor.hwc.reserved_plane_name","NULL",reserved_plane_name);
+  char reserved_planes_name[PROPERTY_VALUE_MAX] = {0};
+  hwc_get_string_property("vendor.hwc.reserved_plane_name","NULL",reserved_planes_name);
 
-  if(strcmp(reserved_plane_name,"NULL")){
+  if(strcmp(reserved_planes_name,"NULL")){
     int reserved_plane_win_type = 0;
-    for(auto &plane_group : plane_groups_){
-      for(auto &p : plane_group->planes){
-        if(!strcmp(p->name(),reserved_plane_name)){
-          plane_group->bReserved = true;
-          reserved_plane_win_type = plane_group->win_type;
-          ALOGI("%s,line=%d Reserved DrmPlane %s , win_type = 0x%x",
-            __FUNCTION__,__LINE__,reserved_plane_name,reserved_plane_win_type);
-          break;
-        }else{
-          plane_group->bReserved = false;
+    std::string reserved_name;
+    std::stringstream ss(reserved_planes_name);
+    while(getline(ss, reserved_name, ',')) {
+      for(auto &plane_group : plane_groups_){
+        for(auto &p : plane_group->planes){
+          if(!strcmp(p->name(),reserved_name.c_str())){
+            plane_group->bReserved = true;
+            reserved_plane_win_type = plane_group->win_type;
+            HWC2_ALOGI("Reserved DrmPlane %s , win_type = 0x%x",
+                reserved_planes_name,reserved_plane_win_type);
+            break;
+          }else{
+            plane_group->bReserved = false;
+          }
         }
-      }
     }
+
     // RK3566 must reserved a extra DrmPlane.
     if(soc_id_ == 0x3566 || soc_id_ == 0x3566a){
       switch(reserved_plane_win_type){
@@ -339,15 +343,16 @@ void DrmDevice::InitResevedPlane(){
         default:
           reserved_plane_win_type = 0;
           break;
-      }
-      for(auto &plane_group : plane_groups_){
-        if(reserved_plane_win_type & plane_group->win_type){
-          plane_group->bReserved = true;
-          ALOGI("%s,line=%d CommirMirror Reserved win_type = 0x%x",
-            __FUNCTION__,__LINE__,reserved_plane_win_type);
-          break;
-        }else{
-          plane_group->bReserved = false;
+        }
+        for(auto &plane_group : plane_groups_){
+          if(reserved_plane_win_type & plane_group->win_type){
+            plane_group->bReserved = true;
+            ALOGI("%s,line=%d CommirMirror Reserved win_type = 0x%x",
+              __FUNCTION__,__LINE__,reserved_plane_win_type);
+            break;
+          }else{
+            plane_group->bReserved = false;
+          }
         }
       }
     }
