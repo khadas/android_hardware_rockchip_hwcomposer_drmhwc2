@@ -43,6 +43,9 @@
 
 #include <drm_fourcc.h>
 #include <log/log.h>
+
+//XML prase
+#include <tinyxml2.h>
 namespace android {
 
 #define ALIGN_DOWN( value, base)	(value & (~(base-1)) )
@@ -59,12 +62,115 @@ void Vop3588::Init(){
   ctx.state.bRgaPolicyEnable = hwc_get_int_property("vendor.hwc.enable_rga_policy","0") > 0;
 
 #ifdef USE_LIBSVEP
+  InitSvep();
+#endif
+}
+#ifdef USE_LIBSVEP
+int Vop3588::InitSvep(){
+
   if(svep_ == NULL){
     svep_ = Svep::Get(true);
   }
-#endif
+
+  if(mSvepEnv_.mValid)
+    return 0;
+
+  char xml_path[PROPERTY_VALUE_MAX];
+  property_get("vendor.hwc.svep_xml_path", xml_path, "/vendor/etc/HwcSvepEnv.xml");
+
+  tinyxml2::XMLDocument doc;
+  int ret = doc.LoadFile(xml_path);
+  if(ret){
+    HWC2_ALOGW("Can't find %s file. ret=%d", xml_path, ret);
+    return -1;
+  }
+
+  HWC2_ALOGI("Load %s success.", xml_path);
+
+  tinyxml2::XMLElement* HwcSvepEnv = doc.RootElement();
+  /* usr tingxml2 to parse resolution.xml */
+  if (!HwcSvepEnv){
+    HWC2_ALOGW("Can't %s:RootElement fail.", xml_path);
+    return -1;
+  }
+
+  mSvepEnv_.mSvepWhitelist_.clear();
+  mSvepEnv_.mSvepBlacklist_.clear();
+
+  const char* verison = "1.1.1";
+  ret = HwcSvepEnv->QueryStringAttribute( "Version", &verison);
+  if(ret){
+    HWC2_ALOGW("Can't find %s verison info. ret=%d", xml_path, ret);
+    return -1;
+  }
+
+  sscanf(verison, "%d.%d.%d", &mSvepEnv_.mVersion.Major,
+                              &mSvepEnv_.mVersion.Minor,
+                              &mSvepEnv_.mVersion.PatchLevel);
+
+
+  tinyxml2::XMLElement* pWhitelist = HwcSvepEnv->FirstChildElement("Whitelist");
+  if (!pWhitelist){
+    HWC2_ALOGW("Can't %s:Whitelist fail. Maybe not set.", xml_path);
+  }else{
+    int iLayerNameCnt = 0;
+    tinyxml2::XMLElement* pWhiteKey = pWhitelist->FirstChildElement("WhiteKeywords");
+    if (!pWhiteKey) {
+      HWC2_ALOGW("index=%d failed to parse %s\n", iLayerNameCnt, "WhiteKeywords"); \
+    }else{
+      while (pWhiteKey) {
+        mSvepEnv_.mSvepWhitelist_.emplace_back(pWhiteKey->GetText());
+        HWC2_ALOGI("SVEP Whitelist[%d]=%s",
+                    iLayerNameCnt, mSvepEnv_.mSvepWhitelist_[iLayerNameCnt].c_str());
+        iLayerNameCnt++;
+        pWhiteKey = pWhiteKey->NextSiblingElement();
+      }
+    }
+  }
+
+  tinyxml2::XMLElement* pBlacklist = HwcSvepEnv->FirstChildElement("Blacklist");
+  if (!pBlacklist){
+    HWC2_ALOGW("Can't %s:Blacklist fail. Maybe not set.", xml_path);
+  }else{
+    int iLayerNameCnt = 0;
+    tinyxml2::XMLElement* pBlackKey = pBlacklist->FirstChildElement("BlackKeywords");
+    if (!pBlackKey) {
+      HWC2_ALOGW("index=%d failed to parse %s\n", iLayerNameCnt, "BlackKeywords");
+    }else{
+      while (pBlackKey) {
+        mSvepEnv_.mSvepBlacklist_.emplace_back(pBlackKey->GetText());
+
+        HWC2_ALOGI("SVEP Blacklist[%d]=%s",
+                    iLayerNameCnt, mSvepEnv_.mSvepBlacklist_[iLayerNameCnt].c_str());
+        iLayerNameCnt++;
+        pBlackKey = pBlackKey->NextSiblingElement();
+      }
+    }
+  }
+
+  mSvepEnv_.mValid = true;
+  return 0;
 }
 
+bool Vop3588::AllowedBySvepEnv(DrmHwcLayer* layer){
+  if(mSvepEnv_.mValid){
+    // 此黑名单内的应用名不参与 SVEP 处理
+    for(auto &black_key : mSvepEnv_.mSvepBlacklist_){
+      if(layer->sLayerName_.find(black_key) != std::string::npos){
+        HWC2_ALOGD_IF_DEBUG("Svep %s in BlackList! not to SVEP.", layer->sLayerName_.c_str());
+        return false;
+      }
+    }
+
+    for(auto &white_key : mSvepEnv_.mSvepWhitelist_){
+      if(layer->sLayerName_.find(white_key)){
+        return true;
+      }
+    }
+  }
+  return true;
+}
+#endif
 bool Vop3588::SupportPlatform(uint32_t soc_id){
   switch(soc_id){
     case 0x3588:
@@ -1676,7 +1782,8 @@ int Vop3588::TrySvepPolicy(
 
   for(auto &drmLayer : layers){
     if(drmLayer->iWidth_ <= 4096 &&
-       (drmLayer->bYuv_)){
+       (drmLayer->bYuv_) &&
+       AllowedBySvepEnv(drmLayer)){
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         // 部分参数变化后需要强制更新
         if(last_svep_mode != svep_mode ||

@@ -213,10 +213,14 @@ LOCAL_SHARED_LIBRARIES += \
 
 LOCAL_CFLAGS += \
 	-DUSE_LIBSVEP=1
+
+LOCAL_REQUIRED_MODULES += \
+	HwcSvepEnv.xml
 endif
 
 LOCAL_MODULE := hwcomposer.$(TARGET_BOARD_HARDWARE)
-LOCAL_REQUIRED_MODULES := HwComposerEnv.xml
+LOCAL_REQUIRED_MODULES += \
+	HwComposerEnv.xml
 
 # API 26 -> Android 8.0
 ifeq (1,$(strip $(shell expr $(PLATFORM_SDK_VERSION) \>= 26)))
@@ -237,13 +241,23 @@ LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE_SUFFIX := $(TARGET_SHLIB_SUFFIX)
 include $(BUILD_SHARED_LIBRARY)
 
-## copy init.qcom.test.rc from etc to /vendor/etc/init/hw
+## copy res/*.xml from etc to /vendor/etc/init/hw
 include $(CLEAR_VARS)
 LOCAL_MODULE := HwComposerEnv.xml
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_CLASS := ETC
-LOCAL_SRC_FILES := HwComposerEnv.xml
+LOCAL_SRC_FILES := res/HwComposerEnv.xml
 include $(BUILD_PREBUILT)
+
+ifeq ($(strip $(BOARD_USES_LIBSVEP)),true)
+## copy res/*.xml from etc to /vendor/etc/init/hw
+include $(CLEAR_VARS)
+LOCAL_MODULE := HwcSvepEnv.xml
+LOCAL_PROPRIETARY_MODULE := true
+LOCAL_MODULE_CLASS := ETC
+LOCAL_SRC_FILES := res/HwcSvepEnv.xml
+include $(BUILD_PREBUILT)
+endif
 
 endif
 

@@ -175,6 +175,20 @@ typedef struct DrmVop2Context{
   StaCtx state;
 } Vop2Ctx;
 
+
+struct SvepXmlVersion{
+  int Major;
+  int Minor;
+  int PatchLevel;
+};
+
+struct SvepXml{
+  SvepXmlVersion mVersion;
+  bool mValid;
+  std::vector<std::string> mSvepWhitelist_;
+  std::vector<std::string> mSvepBlacklist_;
+};
+
  public:
   Vop3588()
     : rgaBufferQueue_((std::make_shared<DrmBufferQueue>()))
@@ -236,6 +250,8 @@ typedef struct DrmVop2Context{
   bool TryOverlay();
 
 #ifdef USE_LIBSVEP
+  int InitSvep();
+  bool AllowedBySvepEnv(DrmHwcLayer *layer);
   bool TrySvepOverlay();
 #endif
 
@@ -327,6 +343,7 @@ typedef struct DrmVop2Context{
             int mGetFrontCnt_ = 0;
     };
     SvepBufferSlot mSvepBufferSlot_;
+    SvepXml mSvepEnv_;
 #endif
 };
 
