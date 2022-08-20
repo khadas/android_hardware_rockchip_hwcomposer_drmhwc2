@@ -1460,7 +1460,8 @@ int Vop3588::TryRgaOverlayPolicy(
                                                     dst_buffer->GetName(),
                                                     source_crop,
                                                     dst_buffer->GetBufferId(),
-                                                    dst_buffer->GetGemHandle());
+                                                    dst_buffer->GetGemHandle(),
+                                                    DRM_MODE_ROTATE_0);
           rga_layer_ready = true;
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
           drmLayer->pRgaBuffer_ = dst_buffer;
@@ -1493,7 +1494,8 @@ int Vop3588::TryRgaOverlayPolicy(
                                                     dst_buffer->GetName(),
                                                     source_crop,
                                                     dst_buffer->GetBufferId(),
-                                                    dst_buffer->GetGemHandle());
+                                                    dst_buffer->GetGemHandle(),
+                                                    DRM_MODE_ROTATE_0);
           use_laster_rga_layer = true;
           drmLayer->bUseRga_ = true;
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
@@ -1905,7 +1907,8 @@ int Vop3588::TrySvepPolicy(
                                                     dst_buffer->GetName(),
                                                     source_crop,
                                                     dst_buffer->GetBufferId(),
-                                                    dst_buffer->GetGemHandle());
+                                                    dst_buffer->GetGemHandle(),
+                                                    drmLayer->transform);
           rga_layer_ready = true;
           drmLayer->bUseSvep_ = true;
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
@@ -1945,7 +1948,8 @@ int Vop3588::TrySvepPolicy(
                                                     output_buffer->GetName(),
                                                     source_crop,
                                                     output_buffer->GetBufferId(),
-                                                    output_buffer->GetGemHandle());
+                                                    output_buffer->GetGemHandle(),
+                                                    drmLayer->transform);
           use_laster_rga_layer = true;
           drmLayer->bUseSvep_ = true;
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
@@ -2032,7 +2036,8 @@ int Vop3588::TrySvepPolicy(
                                                     output_buffer->GetName(),
                                                     source_crop,
                                                     output_buffer->GetBufferId(),
-                                                    output_buffer->GetGemHandle());
+                                                    output_buffer->GetGemHandle(),
+                                                    drmLayer->transform);
           drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(output_buffer->GetFinishFence()));
           return ret;
         }

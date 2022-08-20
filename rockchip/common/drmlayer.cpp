@@ -553,11 +553,11 @@ void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
       int fd, int format, int w, int h, int stride, int byte_stride,
       int size, int usage, uint32_t fourcc, uint64_t modefier,
       std::string name, hwc_frect_t &intput_crop, uint64_t buffer_id,
-      uint32_t gemhandle){
+      uint32_t gemhandle, uint32_t replace_transform){
 
   storeLayerInfo_.valid_       = true;
   storeLayerInfo_.sf_handle    = sf_handle;
-  storeLayerInfo_.transform    = transform;
+  storeLayerInfo_.transform    = replace_transform;
   storeLayerInfo_.source_crop  = source_crop;
   storeLayerInfo_.display_frame  = display_frame;
   storeLayerInfo_.iFd_         = iFd_;
@@ -596,7 +596,7 @@ void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
   source_crop.right  = intput_crop.right;
   source_crop.bottom = intput_crop.bottom;
 
-  transform = DRM_MODE_ROTATE_0;
+  transform = replace_transform;
   Init();
   HWC2_ALOGD_IF_DEBUG(
         "SvepTransform : LayerId[%u] Fourcc=%c%c%c%c Buf=[%4d,%4d,%4d,%4d]  src=[%5.0f,%5.0f,%5.0f,%5.0f] dis=[%4d,%4d,%4d,%4d] Transform=%-8.8s(0x%x)\n"

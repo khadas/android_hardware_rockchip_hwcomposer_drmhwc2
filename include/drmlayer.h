@@ -269,7 +269,7 @@ struct DrmHwcLayer {
       int fd, int format, int w, int h, int stride, int size,
       int byte_stride, int usage, uint32_t fourcc, uint64_t modefier,
       std::string name, hwc_frect_t &intput_crop, uint64_t buffer_id,
-      uint32_t gemhandle);
+      uint32_t gemhandle, uint32_t replace_transform);
   void ResetInfoFromStore();
 
   buffer_handle_t get_usable_handle() const {
