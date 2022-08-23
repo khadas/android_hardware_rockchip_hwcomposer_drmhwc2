@@ -1733,9 +1733,9 @@ int Vop3588::TrySvepPolicy(
 
   char value[PROPERTY_VALUE_MAX];
   int svep_mode = hwc_get_int_property(SVEP_MODE_NAME,"0");
-  // SVEP_RUNTIME_DISABLE_NAME 主要适用于前端系统服务判断当前场景无法使用SVEP模式才设置为0
+  // SVEP_RUNTIME_DISABLE_NAME 主要适用于前端系统服务判断当前场景无法使用SVEP模式才设置为 1
   // 例如 30帧以上片源 或 低延迟场景
-  int svep_runtime_disable = hwc_get_int_property(SVEP_RUNTIME_DISABLE_NAME,"1");
+  int svep_runtime_disable = hwc_get_int_property(SVEP_RUNTIME_DISABLE_NAME,"0");
   bool use_svep = false;
   // Match policy first
   HWC2_ALOGD_IF_DEBUG("%s=%d bSvepReady_=%d",SVEP_MODE_NAME, svep_mode, bSvepReady_);
@@ -1745,7 +1745,7 @@ int Vop3588::TrySvepPolicy(
     // 只有主屏可以享受视频 SVEP 效果
     if(conn && conn->state() == DRM_MODE_CONNECTED &&
         conn->display() == 0 &&
-        svep_runtime_disable > 0){
+        svep_runtime_disable == 0){
       // Match policy first
       use_svep = true;
     }
