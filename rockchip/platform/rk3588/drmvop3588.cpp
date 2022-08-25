@@ -2433,24 +2433,24 @@ bool Vop3588::CheckGLESLayer(DrmHwcLayer *layer){
   }
 
   // RK356x Esmart can't overlay act_w % 16 == 1 and fHScaleMul_ < 1.0 layer.
-  if(!layer->bAfbcd_){
-    if(act_w % 16 == 1 && layer->fHScaleMul_ < 1.0){
-      HWC2_ALOGD_IF_DEBUG("[%s]：RK356x Esmart can't overlay act_w %% 16 == 1 and fHScaleMul_ < 1.0 layer.",
-              layer->sLayerName_.c_str());
-      return true;
-    }
+  // if(!layer->bAfbcd_){
+  //   if(act_w % 16 == 1 && layer->fHScaleMul_ < 1.0){
+  //     HWC2_ALOGD_IF_DEBUG("[%s]：RK356x Esmart can't overlay act_w %% 16 == 1 and fHScaleMul_ < 1.0 layer.",
+  //             layer->sLayerName_.c_str());
+  //     return true;
+  //   }
 
-    int dst_w = static_cast<int>(layer->display_frame.right - layer->display_frame.left);
-    if(dst_w % 2 == 1 && layer->fHScaleMul_ < 1.0){
-      HWC2_ALOGD_IF_DEBUG("[%s]：RK356x Esmart can't overlay dst_w %% 2 == 1 and fHScaleMul_ < 1.0 layer.",
-              layer->sLayerName_.c_str());
-      return true;
-    }
-  }
+  //   int dst_w = static_cast<int>(layer->display_frame.right - layer->display_frame.left);
+  //   if(dst_w % 2 == 1 && layer->fHScaleMul_ < 1.0){
+  //     HWC2_ALOGD_IF_DEBUG("[%s]：RK356x Esmart can't overlay dst_w %% 2 == 1 and fHScaleMul_ < 1.0 layer.",
+  //             layer->sLayerName_.c_str());
+  //     return true;
+  //   }
+  // }
 
   if(layer->transform == -1){
-    HWC2_ALOGD_IF_DEBUG("[%s]：RK356x Esmart can't overlay dst_w %% 2 == 1 and fHScaleMul_ < 1.0 layer.",
-            layer->sLayerName_.c_str());
+    HWC2_ALOGD_IF_DEBUG("[%s]：layer->transform = %d is invalidate",
+            layer->sLayerName_.c_str(), layer->transform);
     return true;
   }
 
