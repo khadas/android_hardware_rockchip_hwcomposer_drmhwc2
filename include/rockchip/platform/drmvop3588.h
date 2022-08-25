@@ -251,7 +251,8 @@ struct SvepXml{
 
 #ifdef USE_LIBSVEP
   int InitSvep();
-  bool AllowedBySvepEnv(DrmHwcLayer *layer);
+  bool SvepAllowedBySvepEnv(DrmHwcLayer *layer);
+  bool SvepAllowedByLocalPolicy(DrmHwcLayer *layer);
   bool TrySvepOverlay();
 #endif
 

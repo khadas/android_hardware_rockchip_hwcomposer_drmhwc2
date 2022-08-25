@@ -152,7 +152,7 @@ int Vop3588::InitSvep(){
   return 0;
 }
 
-bool Vop3588::AllowedBySvepEnv(DrmHwcLayer* layer){
+bool Vop3588::SvepAllowedBySvepEnv(DrmHwcLayer* layer){
   if(mSvepEnv_.mValid){
     // 此黑名单内的应用名不参与 SVEP 处理
     for(auto &black_key : mSvepEnv_.mSvepBlacklist_){
@@ -170,6 +170,23 @@ bool Vop3588::AllowedBySvepEnv(DrmHwcLayer* layer){
   }
   return true;
 }
+
+bool Vop3588::SvepAllowedByLocalPolicy(DrmHwcLayer* layer){
+  // 视频大于4K则不使用 SVEP.
+  if(layer->iWidth_ > 4096)
+    return false;
+
+  // 如果不是视频格式，则不使用SVEP
+  if(!layer->bYuv_)
+    return false;
+
+  // 如果图层本身就是2倍缩小的场景，则不建议使用SVEP.
+  if(layer->fHScaleMul_ > 2.0 && layer->fVScaleMul_ > 2.0)
+    return false;
+
+  return true;
+}
+
 #endif
 bool Vop3588::SupportPlatform(uint32_t soc_id){
   switch(soc_id){
@@ -1783,9 +1800,8 @@ int Vop3588::TrySvepPolicy(
   static int last_contrast_offset = 0;
 
   for(auto &drmLayer : layers){
-    if(drmLayer->iWidth_ <= 4096 &&
-       (drmLayer->bYuv_) &&
-       AllowedBySvepEnv(drmLayer)){
+    if(SvepAllowedByLocalPolicy(drmLayer) &&
+       SvepAllowedBySvepEnv(drmLayer)){
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         // 部分参数变化后需要强制更新
         if(last_svep_mode != svep_mode ||
