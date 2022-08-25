@@ -258,16 +258,17 @@ int DrmDisplayCompositor::QueueComposition(
     return ret;
   }
 
-  // ALOGI("rk-debug display=%d wait start cond=%p frame_no=%" PRIu64,
-  //     composition->display(),
-  //     &composite_queue_cond_,
-  //     composition->frame_no());
+
   // Block the queue if it gets too large. Otherwise, SurfaceFlinger will start
   // to eat our buffer handles when we get about 1 second behind.
-  while(mapDisplayHaveQeueuCnt_[composition->display()] >= 1){
-    pthread_cond_wait(&composite_queue_cond_,&lock_);
+  int max_queue_size = 1;
+  if(composition->has_svep()){
+      max_queue_size = 3;
   }
 
+  while(mapDisplayHaveQeueuCnt_[composition->display()] >= max_queue_size){
+    pthread_cond_wait(&composite_queue_cond_,&lock_);
+  }
   // ALOGI("rk-debug display=%d wait end cond=%p composite_queue_.size = %" PRIu64 ,
   //                                                                       composition->display(),
   //                                                                       &composite_queue_cond_,

@@ -213,6 +213,10 @@ class DrmDisplayComposition {
     out_fence_.Set(out_fence);
   }
 
+  bool has_svep() {
+    return has_svep_layer_;
+  }
+
   void Dump(std::ostringstream *out) const;
 
  private:
@@ -233,6 +237,7 @@ class DrmDisplayComposition {
   UniqueFd out_fence_ = -1;
 
   bool geometry_changed_;
+  bool has_svep_layer_;
   std::vector<DrmHwcLayer> layers_;
   std::vector<DrmCompositionPlane> composition_planes_;
 

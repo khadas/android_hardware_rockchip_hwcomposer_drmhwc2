@@ -1914,21 +1914,16 @@ int Vop3588::TrySvepPolicy(
           drmLayer->iBestPlaneType = PLANE_RK3588_ALL_ESMART_MASK;
           break;
         }else{
-          std::shared_ptr<DrmBuffer> output_buffer = NULL;
-          if(contrast_offset != 0){
-             output_buffer = mSvepBufferSlot_.GetFrontAndAdd();
-          }else{
-             output_buffer = mSvepBufferSlot_.Get();
-          }
+          std::shared_ptr<DrmBuffer> output_buffer = bufferQueue_->BackDrmBuffer();
           if(output_buffer == NULL){
             HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
             break;
           }
           int left = 0, top = 0, right = 0, bottom = 0;
           output_buffer->GetCrop(&left,
-                              &top,
-                              &right,
-                              &bottom);
+                                 &top,
+                                 &right,
+                                 &bottom);
           hwc_frect_t source_crop;
           source_crop.left   = left;
           source_crop.top    = top;
@@ -1980,65 +1975,14 @@ int Vop3588::TrySvepPolicy(
             drmLayer->bUseSvep_ = false;
           }
           last_buffer_id = svepCtx_.mSrc_.mBufferInfo_.uBufferId_;
-          // 若超分前后模式切换，则清理叼早期超分的数据
-          if(last_svep_mode != svep_mode){
-            mSvepBufferSlot_.Clear();
-          }
           last_svep_mode = svep_mode;
           last_contrast_mode = contrast_mode;
           last_enhancement_rate = enhancement_rate;
           last_contrast_offset = contrast_offset;
           dst_buffer->SetFinishFence(output_fence);
           bufferQueue_->QueueBuffer(dst_buffer);
-
-          mSvepBufferSlot_.Add(dst_buffer);
-          std::shared_ptr<DrmBuffer> output_buffer = mSvepBufferSlot_.Get();
-          if(output_buffer == NULL){
-              for(int i = 0; i < mSvepBufferSlot_.Size(); i++){
-                mSvepBufferSlot_.Add(dst_buffer);
-                output_buffer = mSvepBufferSlot_.Get();
-                if(output_buffer != NULL){
-                  break;
-                }
-              }
-          }else if(output_buffer->GetParentId() != drmLayer->uId_){
-            for(int i = 0; i < mSvepBufferSlot_.Size(); i++){
-              mSvepBufferSlot_.Add(dst_buffer);
-              output_buffer = mSvepBufferSlot_.Get();
-              if(output_buffer->GetParentId() == drmLayer->uId_){
-                break;
-              }
-            }
-          }
-          drmLayer->pSvepBuffer_ = output_buffer;
-          drmLayer->ResetInfoFromStore();
-          int left = 0, top = 0, right = 0, bottom = 0;
-          output_buffer->GetCrop(&left,
-                               &top,
-                               &right,
-                               &bottom);
-          hwc_frect_t source_crop;
-          source_crop.left   = left;
-          source_crop.top    = top;
-          source_crop.right  = right;
-          source_crop.bottom = bottom;
-          drmLayer->UpdateAndStoreInfoFromDrmBuffer(output_buffer->GetHandle(),
-                                                    output_buffer->GetFd(),
-                                                    output_buffer->GetFormat(),
-                                                    output_buffer->GetWidth(),
-                                                    output_buffer->GetHeight(),
-                                                    output_buffer->GetStride(),
-                                                    output_buffer->GetByteStride(),
-                                                    output_buffer->GetSize(),
-                                                    output_buffer->GetUsage(),
-                                                    output_buffer->GetFourccFormat(),
-                                                    output_buffer->GetModifier(),
-                                                    output_buffer->GetName(),
-                                                    source_crop,
-                                                    output_buffer->GetBufferId(),
-                                                    output_buffer->GetGemHandle(),
-                                                    drmLayer->transform);
-          drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(output_buffer->GetFinishFence()));
+          drmLayer->pSvepBuffer_ = dst_buffer;
+          drmLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(dst_buffer->GetFinishFence()));
           return ret;
         }
       }
@@ -2070,6 +2014,16 @@ int Vop3588::TrySvepPolicy(
     if(!ret){ // Match sucess, to call im2d interface
       HWC2_ALOGD_IF_DEBUG("Use last rga layer.");
       return ret;
+    }else{
+      for(auto &drmLayer : layers){
+        if(drmLayer->bUseSvep_){
+          if(dst_buffer != NULL)
+            bufferQueue_->QueueBuffer(dst_buffer);
+          drmLayer->ResetInfoFromStore();
+          drmLayer->bUseSvep_ = false;
+        }
+      }
+
     }
   }
   HWC2_ALOGD_IF_DEBUG("fail!, No layer use RGA policy.");

@@ -75,6 +75,9 @@ int DrmDisplayComposition::SetLayers(DrmHwcLayer *layers, size_t num_layers,
   geometry_changed_ = geometry_changed;
 
   for (size_t layer_index = 0; layer_index < num_layers; layer_index++) {
+    if(layers[layer_index].bUseSvep_){
+        has_svep_layer_ = true;
+    }
     layers_.emplace_back(std::move(layers[layer_index]));
   }
 
