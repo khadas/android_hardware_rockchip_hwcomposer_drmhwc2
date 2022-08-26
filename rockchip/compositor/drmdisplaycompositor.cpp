@@ -565,7 +565,7 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
   if(plane->async_commit_property().id()) {
     ret = drmModeAtomicAddProperty(pset, plane->id(),
                                   plane->async_commit_property().id(),
-                                  sideband == true ? crtc_id : 0) < 0;
+                                  sideband == true ? 1 : 0) < 0;
     if (ret) {
       ALOGE("Failed to add async_commit_property property %d to plane %d",
             plane->async_commit_property().id(), plane->id());
