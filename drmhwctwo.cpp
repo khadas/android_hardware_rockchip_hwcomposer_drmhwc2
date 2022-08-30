@@ -2233,6 +2233,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
   ret = ValidatePlanes();
   if (ret != HWC2::Error::None){
     ALOGE("%s fail , ret = %d,line = %d",__FUNCTION__,ret,__LINE__);
+    validate_success_ = false;
     return HWC2::Error::BadConfig;
   }
 

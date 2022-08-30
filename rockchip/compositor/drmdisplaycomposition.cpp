@@ -229,7 +229,7 @@ sp<ReleaseFence> DrmDisplayComposition::GetReleaseFence(hwc2_layer_t layer_id) {
   }
 
   if(comp_layers.empty())
-    return 0;
+    return ReleaseFence::NO_FENCE;
 
   char acBuf[32];
   for (DrmHwcLayer *layer : comp_layers) {
