@@ -21,26 +21,18 @@
   <Blacklist>
 <!-- eg： 以下三种方式配置均可实现对  RockVideoPlayer 应用的过滤，字符串长度越完整，越不容易误判
 
-    <BlackKeywords>
-      SurfaceView[android.rk.RockVideoPlayer/android.rk.RockVideoPlayer.VideoPlayActivity]
-    </BlackKeywords>
+    <BlackKeywords>SurfaceView[android.rk.RockVideoPlayer/android.rk.RockVideoPlayer.VideoPlayActivity]</BlackKeywords>
 
-    <BlackKeywords>
-      RockVideoPlayer
-    </BlackKeywords>
+    <BlackKeywords>RockVideoPlayer</BlackKeywords>
 
-    <BlackKeywords>
-      android.rk.RockVideoPlayer.VideoPlayActivity
-    </BlackKeywords>
+    <BlackKeywords>android.rk.RockVideoPlayer.VideoPlayActivity</BlackKeywords>
 -->
 
   </Blacklist>
 
   <Whitelist>
 <!--
-    <WhiteKeywords>
-      SurfaceView[android.rk.RockVideoPlayer/android.rk.RockVideoPlayer.VideoPlayActivity]
-    </WhiteKeywords>
+    <WhiteKeywords>SurfaceView[android.rk.RockVideoPlayer/android.rk.RockVideoPlayer.VideoPlayActivity]</WhiteKeywords>
 -->
   </Whitelist>
 </HwcSvepEnv>
