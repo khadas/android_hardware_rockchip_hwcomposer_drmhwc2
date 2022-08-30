@@ -698,6 +698,7 @@ class DrmHwcTwo : public hwc2_device_t {
     SyncTimeline sync_timeline_;
     DeferredRetireFence d_retire_fence_;
     bool bDropFrame_;
+    bool bLastSvepState_;
   };
 
   class DrmHotplugHandler : public DrmEventHandler {
