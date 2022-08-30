@@ -180,9 +180,34 @@ bool Vop3588::SvepAllowedByLocalPolicy(DrmHwcLayer* layer){
   if(!layer->bYuv_)
     return false;
 
+  bool yuv_10bit = false;
+  switch(layer->iFormat_){
+    case HAL_PIXEL_FORMAT_YCrCb_NV12_10 :
+    case HAL_PIXEL_FORMAT_YCbCr_422_SP_10 :
+    case HAL_PIXEL_FORMAT_YCrCb_420_SP_10 :
+    case HAL_PIXEL_FORMAT_YUV420_10BIT_I :
+      yuv_10bit = true;
+      break;
+    default:
+      yuv_10bit = false;
+      break;
+  }
+
+  // 10bit 视频不使用SVEP
+  if(yuv_10bit){
+    return false;
+  }
+
   // 如果图层本身就是2倍缩小的场景，则不建议使用SVEP.
   if(layer->fHScaleMul_ > 2.0 && layer->fVScaleMul_ > 2.0)
     return false;
+
+  // 开机动画不使用超分
+  char value[PROPERTY_VALUE_MAX];
+  property_get("service.bootanim.exit", value, "0");
+  if(atoi(value) == 0){
+    return false;
+  }
 
   return true;
 }
