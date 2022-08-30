@@ -1299,23 +1299,29 @@ void DrmHwcTwo::HwcDisplay::UpdateSvepState() {
   }
 
   if(exist_svep_layer != bLastSvepState_){
+
     // story last_svep_state
     bLastSvepState_ = exist_svep_layer;
+    if(exist_svep_layer){
+      property_set("vendor.hwc.svep_state","1");
+    }else{
+      property_set("vendor.hwc.svep_state","0");
+    }
+
     // update ddr state
     int fd_ddr_state = open("/sys/class/devfreq/dmc/system_status", O_WRONLY);
     if (fd_ddr_state < 0) {
         HWC2_ALOGD_IF_DEBUG("failed to open /sys/class/devfreq/dmc/system_status ret =%d", fd_ddr_state);
-    }
-    if(exist_svep_layer){
-      property_set("vendor.hwc.svep_state","1");
-      // S 状态是专门提供给SVEP的场景变频, 进入SVEP场景变频
-      write(fd_ddr_state, "S", sizeof(char));
     }else{
-      property_set("vendor.hwc.svep_state","0");
-      // s 状态是专门提供给SVEP的场景变频, 退出SVEP场景变频
-      write(fd_ddr_state, "s", sizeof(char));
+      if(exist_svep_layer){
+        // S 状态是专门提供给SVEP的场景变频, 进入SVEP场景变频
+        write(fd_ddr_state, "S", sizeof(char));
+      }else{
+        // s 状态是专门提供给SVEP的场景变频, 退出SVEP场景变频
+        write(fd_ddr_state, "s", sizeof(char));
+      }
+      close(fd_ddr_state);
     }
-    close(fd_ddr_state);
   }
   return ;
 }
