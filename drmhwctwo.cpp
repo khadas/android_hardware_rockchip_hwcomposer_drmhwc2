@@ -1201,6 +1201,7 @@ void DrmHwcTwo::HwcDisplay::AddFenceToRetireFence(int fd) {
 bool SortByZpos(const DrmHwcLayer &drmHwcLayer1, const DrmHwcLayer &drmHwcLayer2){
     return drmHwcLayer1.iZpos_ < drmHwcLayer2.iZpos_;
 }
+
 HWC2::Error DrmHwcTwo::HwcDisplay::InitDrmHwcLayer() {
   drm_hwc_layers_.clear();
 
@@ -1276,8 +1277,32 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidatePlanes() {
       ALOGD_IF(LogLevel(DBG_INFO),"[%.4" PRIu32 "]=Client : %s",drm_hwc_layer.uId_,drm_hwc_layer.sLayerName_.c_str());
     }
   }
+#ifdef USE_LIBSVEP
+  // Update svep state.
+  UpdateSvepState();
+#endif
 
   return HWC2::Error::None;
+}
+
+void DrmHwcTwo::HwcDisplay::UpdateSvepState() {
+  bool exist_svep_layer = false;
+  for (auto &drm_hwc_layer : drm_hwc_layers_) {
+    if(drm_hwc_layer.bUseSvep_){
+      exist_svep_layer = true;
+    }
+  }
+
+  static bool last_svep_state = false;
+  if(exist_svep_layer != last_svep_state){
+    last_svep_state = exist_svep_layer;
+    if(exist_svep_layer){
+      property_set("vendor.hwc.svep_state","1");
+    }else{
+      property_set("vendor.hwc.svep_state","0");
+    }
+  }
+  return ;
 }
 
 bool DrmHwcTwo::HwcDisplay::IsLayerStateChange() {

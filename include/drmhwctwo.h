@@ -636,6 +636,7 @@ class DrmHwcTwo : public hwc2_device_t {
    int UpdateBCSH();
    int UpdateOverscan();
    int SwitchHdrMode();
+   void UpdateSvepState();
 
    // Static Screen opt function
    int UpdateTimerEnable();
