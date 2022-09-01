@@ -306,6 +306,8 @@ struct SvepXml{
   SvepContext svepCtx_;
   std::shared_ptr<DrmBufferQueue> bufferQueue_;
   SvepXml mSvepEnv_;
+  int mLastMode_;
+  int mLastModeCnt_;
 #endif
 };
 

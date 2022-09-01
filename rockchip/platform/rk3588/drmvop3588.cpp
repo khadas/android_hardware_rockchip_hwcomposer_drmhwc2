@@ -1819,6 +1819,8 @@ int Vop3588::TrySvepPolicy(
   int contrast_mode = atoi(value);
   property_get(SVEP_CONTRAST_MODE_OFFSET, value, "50");
   int contrast_offset = atoi(value);
+  property_get(SVEP_OSD_VIDEO_ONELINE_MODE, value, "0");
+  int osd_oneline_mode = atoi(value);
   static uint64_t last_buffer_id = 0;
   static int last_enhancement_rate = 0;
   static int last_contrast_mode = 0;
@@ -1919,7 +1921,22 @@ int Vop3588::TrySvepPolicy(
             continue;
           }
 
-          ret = svep_->SetOsdMode(svepCtx_, SVEP_OSD_ENABLE_VIDEO, SVEP_OSD_VIDEO_STR);
+          SvepOsdMode osd_mode = SVEP_OSD_ENABLE_VIDEO;
+          const wchar_t* osd_str = SVEP_OSD_VIDEO_STR;
+          if(osd_oneline_mode > 0){
+            // 视频播放SVEP若干帧后，采用oneline OSD模式
+            if(mLastMode_ != svepCtx_.mSvepMode_){
+              mLastMode_ = svepCtx_.mSvepMode_;
+              mLastModeCnt_ = 0;
+            }
+            mLastModeCnt_++;
+            if(mLastModeCnt_ > SVEP_OSD_VIDEO_ONELINE_CNT){
+              osd_mode = SVEP_OSD_ENABLE_VIDEO_ONELINE;
+              osd_str = SVEP_OSD_VIDEO_ONELINE_STR;
+            }
+          }
+
+          ret = svep_->SetOsdMode(svepCtx_, osd_mode, osd_str);
           if(ret){
             printf("Svep SetOsdMode fail\n");
             continue;
