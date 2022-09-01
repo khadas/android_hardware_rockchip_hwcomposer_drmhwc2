@@ -40,19 +40,16 @@ bool Hwc3399::SupportPlatform(uint32_t soc_id){
   return false;
 }
 
-int Hwc3399::assignPlaneByPlaneMask(DrmDevice* drm, const std::set<int> &active_display){
+int Hwc3399::assignPlaneByPlaneMask(DrmDevice* drm){
   std::vector<PlaneGroup*> all_plane_group = drm->GetPlaneGroups();
   // First, assign active display plane_mask
-  for(auto &display_id : active_display){
+  for (auto &conn : drm->connectors()) {
+    if(conn->state() != DRM_MODE_CONNECTED)
+      continue;
+    int display_id = conn->display();
     DrmCrtc *crtc = drm->GetCrtcForDisplay(display_id);
     if(!crtc){
         ALOGE("%s,line=%d crtc is NULL.",__FUNCTION__,__LINE__);
-        return -1;
-    }
-
-    DrmConnector *conn = drm->GetConnectorForDisplay(display_id);
-    if(!conn){
-        ALOGE("%s,line=%d connector is NULL.",__FUNCTION__,__LINE__);
         return -1;
     }
 
@@ -75,25 +72,25 @@ int Hwc3399::assignPlaneByPlaneMask(DrmDevice* drm, const std::set<int> &active_
   return 0;
 }
 
-int Hwc3399::TryAssignPlane(DrmDevice* drm, const std::set<int> &active_display){
+int Hwc3399::TryAssignPlane(DrmDevice* drm){
   int ret = -1;
   bool have_plane_mask = false;
-  for(auto &display_id : active_display){
+  for (auto &conn : drm->connectors()) {
+    if(conn->state() != DRM_MODE_CONNECTED)
+      continue;
+    int display_id = conn->display();
     DrmCrtc *crtc = drm->GetCrtcForDisplay(display_id);
     if(!crtc){
       ALOGE("%s,line=%d crtc is NULL.",__FUNCTION__,__LINE__);
       continue;
     }
 
-    ALOGI_IF(DBG_INFO,"%s,line=%d, active_display_num = %zu, display=%d",
-                                 __FUNCTION__,__LINE__, active_display.size(),display_id);
-
     if(crtc->get_plane_mask() > 0){
       have_plane_mask = true;
     }
   }
 
-  assignPlaneByPlaneMask(drm, active_display);
+  assignPlaneByPlaneMask(drm);
 
   return ret;
 }

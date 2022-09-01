@@ -118,14 +118,14 @@ class HwcPlatform {
     virtual ~Platform() {
     }
     virtual bool SupportPlatform(uint32_t soc_id) = 0;
-    virtual int TryAssignPlane(DrmDevice* drm, const std::set<int> &active_display) = 0;
+    virtual int TryAssignPlane(DrmDevice* drm) = 0;
   };
 
   // Creates a planner instance with platform-specific planning stages
   static std::unique_ptr<HwcPlatform> CreateInstance(DrmDevice *drm);
 
   // Try to assign DrmPlane to display
-  int TryAssignPlane(DrmDevice* drm, const std::set<int> &active_display);
+  int TryAssignPlane(DrmDevice* drm);
 
   template <typename T, typename... A>
   void AddStage(A &&... args) {

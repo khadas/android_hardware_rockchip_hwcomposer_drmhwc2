@@ -83,12 +83,6 @@ int ResourceManager::Init(DrmHwcTwo *hwc2) {
     return ret ? -EINVAL : ret;
   }
 
-  hwcPlatform_ = HwcPlatform::CreateInstance(drm);
-  if (!hwcPlatform_) {
-    ALOGE("Failed to create HwcPlatform instance");
-    return -1;
-  }
-
   return 0;
 }
 
@@ -175,22 +169,6 @@ std::shared_ptr<DrmDisplayCompositor> ResourceManager::GetDrmDisplayCompositor(D
 
   auto pairDrmDisplayCompositor = mapDrmDisplayCompositor_.find(crtc->id());
   return pairDrmDisplayCompositor->second;
-}
-
-int ResourceManager::assignPlaneGroup(){
-  uint32_t active_display_num = getActiveDisplayCnt();
-  if(active_display_num==0){
-    ALOGI_IF(DBG_INFO,"%s,line=%d, active_display_num = %u not to assignPlaneGroup",
-                                 __FUNCTION__,__LINE__,active_display_num);
-    return -1;
-  }
-
-  int ret = hwcPlatform_->TryAssignPlane(drms_.front().get(), active_display_);
-  if(ret){
-    HWC2_ALOGI("TryAssignPlane fail, ret = %d",ret);
-    return ret;
-  }
-  return 0;
 }
 
 int ResourceManager::GetWBDisplay() const {

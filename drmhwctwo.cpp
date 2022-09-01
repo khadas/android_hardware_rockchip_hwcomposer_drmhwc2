@@ -322,14 +322,11 @@ int DrmHwcTwo::HwcDisplay::ClearDisplay() {
     return -1;
   }
 
+  if(connector_ != NULL &&
+     connector_->hwc_state() != HwcConnnectorStete::RELEASE_CRTC){
+    compositor_->ClearDisplay();
+  }
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,handle_);
-  compositor_->ClearDisplay();
-  return 0;
-}
-
-int DrmHwcTwo::HwcDisplay::ReleaseResource(){
-  resource_manager_->removeActiveDisplayCnt(static_cast<int>(handle_));
-  resource_manager_->assignPlaneGroup();
   return 0;
 }
 
@@ -414,9 +411,6 @@ HWC2::Error DrmHwcTwo::HwcDisplay::Init() {
     }
   }
 
-  resource_manager_->creatActiveDisplayCnt(display);
-  resource_manager_->assignPlaneGroup();
-
   // soc_id
   ctx_.soc_id = resource_manager_->getSocId();
   // vop aclk
@@ -457,7 +451,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::InitVirtual() {
 }
 
 
-HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit() {
+HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit(bool clear_layer) {
 
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,handle_);
 
@@ -498,11 +492,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit() {
     HWC2_ALOGE("Failed to UpdateDisplay3DLut for display=%d %d\n", display, ret);
   }
 
-  resource_manager_->creatActiveDisplayCnt(display);
-  resource_manager_->assignPlaneGroup();
-
   // Reset HwcLayer resource
-  if(handle_ != HWC_DISPLAY_PRIMARY){
+  if(clear_layer && handle_ != HWC_DISPLAY_PRIMARY){
     // Clear Layers
     for(auto &map_layer : layers_){
       map_layer.second.clear();
@@ -515,6 +506,13 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit() {
     client_layer_.clear();
   }
 
+  compositor_ = resource_manager_->GetDrmDisplayCompositor(crtc_);
+  ret = compositor_->Init(resource_manager_, display);
+  if (ret) {
+    ALOGE("Failed display compositor init for display %d (%d)", display, ret);
+    return HWC2::Error::NoResources;
+  }
+
   if(init_success_){
     return HWC2::Error::None;
   }
@@ -522,13 +520,6 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit() {
   planner_ = Planner::CreateInstance(drm_);
   if (!planner_) {
     ALOGE("Failed to create planner instance for composition");
-    return HWC2::Error::NoResources;
-  }
-
-  compositor_ = resource_manager_->GetDrmDisplayCompositor(crtc_);
-  ret = compositor_->Init(resource_manager_, display);
-  if (ret) {
-    ALOGE("Failed display compositor init for display %d (%d)", display, ret);
     return HWC2::Error::NoResources;
   }
 
@@ -2202,7 +2193,6 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
   if(ret != HWC2::Error::None){
     ALOGE_IF(LogLevel(DBG_ERROR),"Check display %" PRIu64 " state fail, %s,line=%d", handle_,
           __FUNCTION__, __LINE__);
-    ClearDisplay();
     composition_planes_.clear();
     validate_success_ = false;
     return HWC2::Error::None;
@@ -3160,6 +3150,7 @@ void DrmHwcTwo::HandleInitialHotplugState(DrmDevice *drmDevice) {
 void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
   int32_t ret = 0;
   bool primary_change = true;
+  bool unplug_event = false;
   for (auto &conn : drm_->connectors()) {
     drmModeConnection old_state = conn->state();
     conn->ResetModesReady();
@@ -3171,9 +3162,15 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
       continue;
     if (cur_state == old_state)
       continue;
+
+    // 当前状态为连接，则为插入事件
+    if(cur_state == DRM_MODE_DISCONNECTED){
+      unplug_event = true;
+    }
+
     ALOGI("hwc_hotplug: %s event @%" PRIu64 " for connector %u type=%s, type_id=%d\n",
-          cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug", timestamp_us,
-          conn->id(),drm_->connector_type_str(conn->type()),conn->type_id());
+          cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug", timestamp_us, conn->id(),
+          drm_->connector_type_str(conn->type()),conn->type_id());
 
     int display_id = conn->display();
     primary_change = (display_id == 0);
@@ -3182,7 +3179,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
       ret |= (int32_t)display.HoplugEventTmeline();
       ret |= (int32_t)display.UpdateDisplayMode();
       ret |= (int32_t)display.ChosePreferredConfig();
-      ret |= (int32_t)display.CheckStateAndReinit();
+      ret |= (int32_t)display.CheckStateAndReinit(true);
       if(ret != 0){
         HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                    cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
@@ -3202,7 +3199,6 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
     }else{
       ret |= (int32_t)display.ClearDisplay();
       ret |= (int32_t)drm_->ReleaseDpyRes(display_id);
-      ret |= (int32_t)display.ReleaseResource();
       if(ret != 0){
         HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                    cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
@@ -3228,7 +3224,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
         ret |= (int32_t)display.HoplugEventTmeline();
         ret |= (int32_t)display.UpdateDisplayMode();
         ret |= (int32_t)display.ChosePreferredConfig();
-        ret |= (int32_t)display.CheckStateAndReinit();
+        ret |= (int32_t)display.CheckStateAndReinit(true);
         if(ret != 0){
           HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                     cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
@@ -3243,7 +3239,6 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
       }else{
       ret |= (int32_t)display.ClearDisplay();
       ret |= (int32_t)drm_->ReleaseDpyRes(display_id);
-      ret |= (int32_t)display.ReleaseResource();
       if(ret != 0){
         HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                   cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
@@ -3258,8 +3253,6 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
     }
   }
 
-  auto &display = hwc2_->displays_.at(0);
-  display.InvalidateControl(5,20);
 
   if(primary_change){
     for (auto &conn : drm_->connectors()) {
@@ -3270,11 +3263,44 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
       }
     }
   }
+
+  // 拔出事件，说明存在crtc资源释放
+  if(unplug_event){
+    for (auto &conn : drm_->connectors()) {
+      drmModeConnection cur_state = conn->state();
+      HwcConnnectorStete cur_hwc_state = conn->hwc_state();
+      if(cur_state == DRM_MODE_CONNECTED){
+        if(cur_hwc_state == RELEASE_CRTC ||
+           cur_hwc_state == NO_CRTC){
+          int display_id = conn->display();
+          auto &display = hwc2_->displays_.at(display_id);
+          ret |= (int32_t)display.HoplugEventTmeline();
+          ret |= (int32_t)display.UpdateDisplayMode();
+          ret |= (int32_t)display.ChosePreferredConfig();
+          ret |= (int32_t)display.CheckStateAndReinit(true);
+          if(ret != 0){
+            HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
+                      cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
+                      conn->id(),drm_->connector_type_str(conn->type()),conn->type_id());
+          }else{
+            HWC2_ALOGI("hwc_hotplug: %s connector %u type=%s type_id=%d send hotplug event to SF.",
+                      cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
+                      conn->id(),drm_->connector_type_str(conn->type()),conn->type_id());
+            hwc2_->HandleDisplayHotplug(display_id, cur_state);
+            display.SyncPowerMode();
+          }
+        }
+      }
+    }
+  }
+
+  auto &display = hwc2_->displays_.at(0);
+  display.InvalidateControl(5,20);
+
   return;
 }
 
 void DrmHwcTwo::DrmHotplugHandler::HandleResolutionSwitchEvent(int display_id) {
-
   // 若系统没有设置为动态更新模式的话，则不进行分辨率更新
   ResourceManager* rm = ResourceManager::getInstance();
   if(!rm->IsDynamicDisplayMode()){

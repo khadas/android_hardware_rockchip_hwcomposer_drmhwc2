@@ -88,7 +88,7 @@ class DrmDisplayCompositor {
   int GetTimestamp();
   int64_t GetPhasedVSync(int64_t frame_ns, int64_t current);
   int SyntheticWaitVBlank();
-  void CollectInfo(std::unique_ptr<DrmDisplayComposition> composition,
+  int CollectInfo(std::unique_ptr<DrmDisplayComposition> composition,
                   int status, bool writeback = false);
   void Commit();
   int CollectCommitInfo(drmModeAtomicReqPtr pset,

@@ -32,6 +32,15 @@ namespace android {
 #define DRM_CONNECTOR_SPILT_MODE_MASK 0xf0
 #define DRM_CONNECTOR_SPILT_RATIO 2
 
+
+enum HwcConnnectorStete{
+  NORMAL         = 0,  // 正常获取
+  NO_CRTC        = 1,  // 无法获取 Crtc 资源状态
+  HOLD_CRTC      = 2,  // 从其他已连接的 Connector 竞争获得状态
+  RELEASE_CRTC   = 3,  // 被其他高优先级或者热插拔设备抢走的状态
+  MIRROR_CRTC    = 4,  // Mirror Crtc 状态
+};
+
 class DrmDevice;
 
 class DrmConnector {
@@ -98,6 +107,8 @@ class DrmConnector {
   DrmEncoder *encoder() const;
   void set_encoder(DrmEncoder *encoder);
   drmModeConnection state();
+  HwcConnnectorStete hwc_state();
+  int set_hwc_state(HwcConnnectorStete state);
 
   uint32_t mm_width() const;
   uint32_t mm_height() const;
@@ -153,6 +164,7 @@ class DrmConnector {
   uint32_t unique_id_;
   uint32_t priority_;
   drmModeConnection state_;
+  HwcConnnectorStete hwc_state_;
 
   uint32_t mm_width_;
   uint32_t mm_height_;
@@ -225,6 +237,7 @@ class DrmConnector {
   int32_t SrcY_=0;
   int32_t SrcW_=0;
   int32_t SrcH_=0;
+
 };
 }  // namespace android
 

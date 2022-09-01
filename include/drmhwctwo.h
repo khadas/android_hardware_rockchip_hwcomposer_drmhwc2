@@ -557,7 +557,7 @@ class DrmHwcTwo : public hwc2_device_t {
 
     HWC2::Error InitVirtual();
 
-    HWC2::Error CheckStateAndReinit();
+    HWC2::Error CheckStateAndReinit(bool clear_layer = false);
 
     HWC2::Error RegisterVsyncCallback(hwc2_callback_data_t data,
                                       hwc2_function_pointer_t func);
@@ -569,7 +569,6 @@ class DrmHwcTwo : public hwc2_device_t {
     HWC2::Error UnregisterInvalidateCallback();
 
     int ClearDisplay();
-    int ReleaseResource();
 
     HWC2::Error CheckDisplayState();
 

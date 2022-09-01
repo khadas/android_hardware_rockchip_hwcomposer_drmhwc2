@@ -100,14 +100,17 @@ std::unique_ptr<HwcPlatform> HwcPlatform::CreateInstance(DrmDevice *drm_device) 
 }
 
 // TryAssignPlane, Assign hardware layer resources.
-int HwcPlatform::TryAssignPlane(DrmDevice* drm, const std::set<int> &map_dpys){
+int HwcPlatform::TryAssignPlane(DrmDevice* drm){
   int ret = -1;
+  if(stages_.size() == 0){
+    HWC2_ALOGE("stages_ size=%zu TryAssignPlane fail!", stages_.size());
+  }
   // Go through the provisioning stages and provision planes
   for (auto &i : stages_) {
     if(i->SupportPlatform(drm->getSocId())){
-      ret = i->TryAssignPlane(drm, map_dpys);
+      ret = i->TryAssignPlane(drm);
       if (ret) {
-        ALOGE("Failed provision stage with ret %d", ret);
+        HWC2_ALOGE("Failed provision stage with ret %d", ret);
         return ret;
       }
     }

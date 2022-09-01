@@ -63,7 +63,7 @@ DrmConnector::DrmConnector(DrmDevice *drm, drmModeConnectorPtr c,
       type_(c->connector_type),
       type_id_(c->connector_type_id),
       unique_id_(0),
-      priority_(-1),
+      priority_(0),
       state_(c->connection),
       mm_width_(c->mmWidth),
       mm_height_(c->mmHeight),
@@ -894,6 +894,14 @@ void DrmConnector::set_encoder(DrmEncoder *encoder) {
 
 drmModeConnection DrmConnector::state() {
   return state_;
+}
+
+HwcConnnectorStete DrmConnector::hwc_state(){
+  return hwc_state_;
+}
+int DrmConnector::set_hwc_state(HwcConnnectorStete state){
+  hwc_state_ = state;
+  return 0;
 }
 
 uint32_t DrmConnector::mm_width() const {

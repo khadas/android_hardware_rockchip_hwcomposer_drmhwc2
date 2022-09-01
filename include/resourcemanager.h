@@ -50,10 +50,6 @@ class ResourceManager {
     return drms_;
   }
 
-  const std::unique_ptr<HwcPlatform> &GetHwcPlatform() const {
-    return hwcPlatform_;
-  }
-
   DrmHwcTwo *GetHwc2() const {
     return hwc2_;
   }
@@ -66,17 +62,7 @@ class ResourceManager {
     return displays_;
   }
 
-  void creatActiveDisplayCnt(int display) {
-    if(active_display_.count(display) == 0)
-      active_display_.insert(display);
-  }
-  void removeActiveDisplayCnt(int display) {
-    if(active_display_.count(display) > 0)
-      active_display_.erase(display);
-  }
   uint32_t getActiveDisplayCnt() { return active_display_.size();}
-
-  int assignPlaneGroup();
 
   int getFb0Fd() { return fb0_fd;}
   int getSocId() { return soc_id_;}
@@ -116,7 +102,6 @@ class ResourceManager {
   std::set<int> active_display_;
   std::vector<std::unique_ptr<DrmDevice>> drms_;
   std::vector<std::shared_ptr<Importer>> importers_;
-  std::unique_ptr<HwcPlatform> hwcPlatform_;
   std::map<int, std::shared_ptr<DrmDisplayCompositor>> mapDrmDisplayCompositor_;
   std::map<int,int> displays_;
   DrmGralloc *drmGralloc_;

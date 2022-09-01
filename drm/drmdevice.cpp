@@ -361,7 +361,6 @@ void DrmDevice::InitResevedPlane(){
 }
 
 std::tuple<int, int> DrmDevice::Init(const char *path, int num_displays) {
-
   init_white_modes();
   int ret = InitEnvFromXml();
   if(ret){
@@ -750,6 +749,12 @@ std::tuple<int, int> DrmDevice::Init(const char *path, int num_displays) {
     return std::make_tuple(ret, 0);
   }
 
+  hwcPlatform_ = HwcPlatform::CreateInstance(this);
+  if (!hwcPlatform_) {
+    ALOGE("Failed to create HwcPlatform instance");
+    return std::make_tuple(-1, 0);
+  }
+
   return std::make_tuple(ret, displays_.size());
 }
 
@@ -1016,7 +1021,7 @@ void DrmDevice::ConfigurePossibleDisplays(){
 
   if (primary_length) {
     std::stringstream ss(primary_name);
-    uint32_t connector_priority = 0;
+    uint32_t connector_priority = 1;
     while(getline(ss, conn_name, ',')) {
       for (auto &conn : connectors_) {
         snprintf(acConnName,50,"%s-%d",connector_type_str(conn->type()),conn->type_id());
@@ -1033,7 +1038,7 @@ void DrmDevice::ConfigurePossibleDisplays(){
 
   if (extend_length) {
     std::stringstream ss(extend_name);
-    uint32_t connector_priority = 0;
+    uint32_t connector_priority = 1;
     while(getline(ss, conn_name, ',')) {
       for (auto &conn : connectors_) {
         snprintf(acConnName,50,"%s-%d",connector_type_str(conn->type()),conn->type_id());
@@ -1050,14 +1055,12 @@ void DrmDevice::ConfigurePossibleDisplays(){
   return;
 }
 
-static pthread_mutex_t diplay_route_mutex = PTHREAD_MUTEX_INITIALIZER;
 int DrmDevice::UpdateDisplayGamma(int display_id){
-  pthread_mutex_lock(&diplay_route_mutex);
+  std::lock_guard<std::mutex> lock(mtx_);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
-
   if (!conn || conn->state() != DRM_MODE_CONNECTED ||
       !conn->encoder() || !conn->encoder()->crtc()){
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return 0;
   }
 
@@ -1065,7 +1068,7 @@ int DrmDevice::UpdateDisplayGamma(int display_id){
   DrmCrtc *crtc = conn->encoder()->crtc();
   if(crtc->gamma_lut_property().id() == 0){
     ALOGI("%s,line=%d %s crtc-id=%d not support gamma.",__FUNCTION__,__LINE__,connector_type_str(conn->type()),crtc->id());
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return 0;
   }
 
@@ -1082,37 +1085,37 @@ int DrmDevice::UpdateDisplayGamma(int display_id){
     ret = drmModeCreatePropertyBlob(fd_.get(), gamma_lut, sizeof(gamma_lut), &blob_id);
     if(ret){
       ALOGE("%s,line=%d %s crtc-id=%d CreatePropertyBlob  fail.",__FUNCTION__,__LINE__,connector_type_str(conn->type()),crtc->id());
-      pthread_mutex_unlock(&diplay_route_mutex);
+
       return ret;
     }
     ret = drmModeObjectSetProperty(fd_.get(), crtc->id(), DRM_MODE_OBJECT_CRTC, crtc->gamma_lut_property().id(), blob_id);
     if(ret){
       ALOGE("%s,line=%d %s crtc-id=%d gamma fail.",__FUNCTION__,__LINE__,connector_type_str(conn->type()),crtc->id());
-      pthread_mutex_unlock(&diplay_route_mutex);
+
       return ret;
     }
     ALOGD_IF(LogLevel(DBG_VERBOSE),"%s,line=%d, display=%d crtc-id=%d set Gamma success!",__FUNCTION__,__LINE__,
                                     crtc->id(),display_id);
   }
-  pthread_mutex_unlock(&diplay_route_mutex);
+
   return ret;
 
 }
 
 int DrmDevice::UpdateDisplay3DLut(int display_id){
-  pthread_mutex_lock(&diplay_route_mutex);
+  std::lock_guard<std::mutex> lock(mtx_);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
 
   if (!conn || conn->state() != DRM_MODE_CONNECTED ||
       !conn->encoder() || !conn->encoder()->crtc()){
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return 0;
   }
 
   DrmCrtc *crtc = conn->encoder()->crtc();
   if(crtc->cubic_lut_property().id() == 0){
     ALOGI("%s,line=%d %s crtc-id=%d not support cubic lut.",__FUNCTION__,__LINE__,connector_type_str(conn->type()),crtc->id());
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return 0;
   }
   const struct disp_info* info = conn->baseparameter_info();
@@ -1130,33 +1133,30 @@ int DrmDevice::UpdateDisplay3DLut(int display_id){
     ret = drmModeCreatePropertyBlob(fd_.get(), cubit_lut, sizeof(cubit_lut), &blob_id);
     if(ret){
       ALOGE("%s,line=%d %s crtc-id=%d CreatePropertyBlob  fail.",__FUNCTION__,__LINE__,connector_type_str(conn->type()),crtc->id());
-      pthread_mutex_unlock(&diplay_route_mutex);
+
       return ret;
     }
     ret = drmModeObjectSetProperty(fd_.get(), crtc->id(), DRM_MODE_OBJECT_CRTC, crtc->cubic_lut_property().id(), blob_id);
     if(ret){
       ALOGE("%s,line=%d %s crtc-id=%d 3D Lut fail.",__FUNCTION__,__LINE__,connector_type_str(conn->type()),crtc->id());
-      pthread_mutex_unlock(&diplay_route_mutex);
+
       return ret;
     }
     ALOGD_IF(LogLevel(DBG_VERBOSE),"%s,line=%d, display=%d crtc-id=%d set 3DLut success!",__FUNCTION__,__LINE__,
                                     crtc->id(),display_id);
-
   }
-  pthread_mutex_unlock(&diplay_route_mutex);
+
   return ret;
 
 }
 
 int DrmDevice::UpdateDisplayMode(int display_id){
-  pthread_mutex_lock(&diplay_route_mutex);
+  std::lock_guard<std::mutex> lock(mtx_);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
-
   if (!conn || conn->state() != DRM_MODE_CONNECTED   ||
       !conn->current_mode().id() || !conn->encoder() ||
       !conn->encoder()->crtc() ||
        conn->current_mode() == conn->active_mode()){
-    pthread_mutex_unlock(&diplay_route_mutex);
     return 0;
   }
 
@@ -1166,7 +1166,6 @@ int DrmDevice::UpdateDisplayMode(int display_id){
     drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
     if (!pset) {
       ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
-      pthread_mutex_unlock(&diplay_route_mutex);
       return -ENOMEM;
     }
 
@@ -1186,7 +1185,7 @@ int DrmDevice::UpdateDisplayMode(int display_id){
         if (ret) {
           ALOGE("Failed to add plane %d disable to pset", plane->id());
           drmModeAtomicFree(pset);
-          pthread_mutex_unlock(&diplay_route_mutex);
+
           return ret;
         }
         HWC2_ALOGI("Crtc-id = %d disable plane-id = %d", crtc->id(), plane->id());
@@ -1198,7 +1197,6 @@ int DrmDevice::UpdateDisplayMode(int display_id){
     if (ret < 0) {
       ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
       drmModeAtomicFree(pset);
-      pthread_mutex_unlock(&diplay_route_mutex);
       return ret;
     }
   }
@@ -1207,7 +1205,7 @@ int DrmDevice::UpdateDisplayMode(int display_id){
   drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
   if (!pset) {
     ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return -ENOMEM;
   }
 
@@ -1233,7 +1231,7 @@ int DrmDevice::UpdateDisplayMode(int display_id){
   if (ret < 0) {
     ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
     drmModeAtomicFree(pset);
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return ret;
   }
 
@@ -1246,32 +1244,27 @@ int DrmDevice::UpdateDisplayMode(int display_id){
 
   hotplug_timeline++;
 
-  pthread_mutex_unlock(&diplay_route_mutex);
-
   FlipResolutionSwitchHandler(display_id);
   return 0;
 }
 
-// Bind DrmConnector and DrmCrtc resource.
-int DrmDevice::BindDpyRes(int display_id){
-  pthread_mutex_lock(&diplay_route_mutex);
-
-  DrmConnector *conn = GetConnectorForDisplay(display_id);
+// 检查 Connector 状态
+int DrmDevice::CheckConnectorState(int display_id, DrmConnector *conn){
   if (!conn) {
-    ALOGE("%s:line=%d Failed to find display-id=%d connector\n",
-          __FUNCTION__, __LINE__,display_id);
-    pthread_mutex_unlock(&diplay_route_mutex);
+    HWC2_ALOGE("Failed to find display-id=%d connector\n", display_id);
     return -EINVAL;
   }
 
   if(conn->state() != DRM_MODE_CONNECTED){
-    ALOGE("%s:line=%d display-id=%d connector state is disconnected\n",
-          __FUNCTION__, __LINE__,display_id);
-    pthread_mutex_unlock(&diplay_route_mutex);
+    HWC2_ALOGE("display-id=%d connector state is disconnected\n",display_id);
     return -EINVAL;
   }
+  return 0;
+}
 
-  // Bind DrmEncoder and DrmCrtc.
+// 获取可用的 Crtc 资源
+int DrmDevice::FindAvailableCrtc(int display_id, DrmConnector *conn, DrmCrtc **out_crtc){
+  // 1. 第一次遍历所有可获取的空闲Crtc资源
   conn->set_encoder(NULL);
   for (DrmEncoder *enc : conn->possible_encoders()) {
     for (DrmCrtc *crtc : enc->possible_crtcs()) {
@@ -1279,90 +1272,125 @@ int DrmDevice::BindDpyRes(int display_id){
         crtc->set_display(conn->display());
         enc->set_crtc(crtc);
         conn->set_encoder(enc);
-        ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d set display-id=%d with conn[%d] crtc=%d\n",
-                __FUNCTION__, __LINE__,display_id, conn->id(), crtc->id());
+        conn->set_hwc_state(HwcConnnectorStete::NORMAL);
+        *out_crtc = crtc;
+        HWC2_ALOGI("Find display-id=%d with conn[%d] crtc=%d success!\n",
+            display_id, conn->id(), crtc->id());
+        return 0;
       }
     }
   }
 
-  // Print display state by property.
-  if (conn && conn->encoder() && conn->encoder()->crtc()){
-    char conn_name[50];
-    char property_conn_name[50];
-    DrmCrtc *crtc = conn->encoder()->crtc();
-    snprintf(conn_name,50,"%s-%d:%d:connected",connector_type_str(conn->type()),conn->type_id(),crtc->id());
-    snprintf(property_conn_name,50,"vendor.hwc.device.display-%d",display_id);
-    property_set(property_conn_name, conn_name);
+  // 2. 若判断是否存在优先级，进行第二次遍历Crtc资源
+  //    -> 若存在，则进行优先级抢占
+  //    -> 若不存在，则直接抢占
+  if(conn->priority() > 0){ // 存在优先级
+    for (DrmEncoder *enc : conn->possible_encoders()) {
+      for (DrmCrtc *crtc : enc->possible_crtcs()) {
+        int temp_display_id = crtc->display();
+        DrmConnector* temp_conn = GetConnectorForDisplay(temp_display_id);
+        // 2.1. 检查待竞争的Connector状态
+        //      -> 若状态不正常，则直接抢占
+        //      -> 若状态正常，则进行优先级抢占
+        int ret = CheckConnectorState(temp_display_id, temp_conn);
+        if(ret){ // 状态不正常
+          // 解绑 temp_conn 与 crtc.
+          ReleaseConnectorAndCrtc(temp_display_id,
+                                  temp_conn,
+                                  crtc);
+          crtc->set_display(conn->display());
+          enc->set_crtc(crtc);
+          conn->set_encoder(enc);
+          conn->set_hwc_state(HwcConnnectorStete::HOLD_CRTC);
+          *out_crtc = crtc;
+          HWC2_ALOGI("Find display-id=%d with conn[%d] crtc=%d success!",
+              display_id, conn->id(), crtc->id());
+          return 0;
+        }else{ // 若状态正常，则进行优先级抢占
+          if(conn->priority() < temp_conn->priority()){
+            // 解绑 temp_conn 与 crtc.
+            ReleaseConnectorAndCrtc(temp_display_id,
+                                    temp_conn,
+                                    crtc);
+            crtc->set_display(conn->display());
+            enc->set_crtc(crtc);
+            conn->set_encoder(enc);
+            conn->set_hwc_state(HwcConnnectorStete::HOLD_CRTC);
+            *out_crtc = crtc;
+            HWC2_ALOGI("Find display-id=%d with conn[%d] crtc=%d success!",
+                display_id, conn->id(), crtc->id());
+            return 0;
+          }
+        }
+      }
+    }
   }else{
-    HWC2_ALOGE("display-id=%d conn-id=%d can't find crtc resource.", display_id, conn->id());
-    char conn_name[50];
-    char property_conn_name[50];
-    snprintf(conn_name,50,"%s-%d:no_crtc",connector_type_str(conn->type()),conn->type_id());
-    snprintf(property_conn_name,50,"vendor.hwc.device.display-%d",display_id);
-    pthread_mutex_unlock(&diplay_route_mutex);
-    return -EINVAL;
+    for (DrmEncoder *enc : conn->possible_encoders()) {
+      for (DrmCrtc *crtc : enc->possible_crtcs()) {
+        int temp_display_id = crtc->display();
+        DrmConnector * temp_conn = GetConnectorForDisplay(temp_display_id);
+          // 解绑 temp_conn 与 crtc.
+          ReleaseConnectorAndCrtc(temp_display_id,
+                                  temp_conn,
+                                  crtc);
+          crtc->set_display(conn->display());
+          enc->set_crtc(crtc);
+          conn->set_encoder(enc);
+          conn->set_hwc_state(HwcConnnectorStete::HOLD_CRTC);
+          *out_crtc = crtc;
+          HWC2_ALOGI("Find display-id=%d with conn[%d] crtc=%d success!",
+              display_id, conn->id(), crtc->id());
+          return 0;
+      }
+    }
   }
+  // 没有找到可用的Crtc资源
+
+  // 更新状态查询接口信息
+  char conn_name[50];
+  char property_conn_name[50];
+  snprintf(conn_name,50,"%s-%d:connected-no-crtc",connector_type_str(conn->type()),conn->type_id());
+  snprintf(property_conn_name,50,"vendor.hwc.device.display-%d", display_id);
+  property_set(property_conn_name, conn_name);
+  conn->set_hwc_state(HwcConnnectorStete::NO_CRTC);
+  HWC2_ALOGW("Can't find available crtc for display-id=%d with conn[%d].",
+      display_id, conn->id());
+  return -1;
+}
+
+// 绑定 Connector 与 Crtc 资源
+int DrmDevice::BindConnectorAndCrtc(int display_id, DrmConnector* conn, DrmCrtc* crtc){
+
+  // 更新状态查询接口信息
+  char conn_name[50];
+  char property_conn_name[50];
+  snprintf(conn_name,50,"%s-%d:%d:connected",connector_type_str(conn->type()),conn->type_id(),crtc->id());
+  snprintf(property_conn_name,50,"vendor.hwc.device.display-%d", display_id);
+  property_set(property_conn_name, conn_name);
 
   // Check display mode.
-  if(!conn->current_mode().id()){
-    ALOGD_IF(LogLevel(DBG_DEBUG),"%s:line=%d, display-id=%d conn-id=%d current-id=%d",
-              __FUNCTION__,__LINE__,display_id,conn->id(),conn->current_mode().id());
-    pthread_mutex_unlock(&diplay_route_mutex);
+  DrmMode current_mode = conn->current_mode();
+  if(!current_mode.id()){
+    HWC2_ALOGI("display-id=%d conn-id=%d current-id=%d is invalid.",
+              display_id,conn->id(),conn->current_mode().id());
     return -EINVAL;
   }
 
-  // if current mode not equal kernel mode , must to disable all
-  // plane.
-  DrmCrtc *crtc = conn->encoder()->crtc();
-  DrmMode current_mode = conn->current_mode();
+  // 如果开机阶段当前设置的分辨率与 kernel uboot 初始化不一致，则需要关闭所有图层
   if(!current_mode.equal_no_flag_and_type(crtc->kernel_mode())){
     HWC2_ALOGI("Display-id=%d kernel-mode not equal to current-mode,"
                "must to disable all plane.", display_id);
-
-    int ret;
-    drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
-    if (!pset) {
-      ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
-      pthread_mutex_unlock(&diplay_route_mutex);
-      return -ENOMEM;
-    }
-
-    // Disable DrmPlane resource.
-    for(auto &plane_group : plane_groups_){
-      uint32_t crtc_mask = 1 << crtc->pipe();
-      if(!plane_group->acquire(crtc_mask))
-          continue;
-      for(auto &plane : plane_group->planes){
-        if(!plane)
-          continue;
-        ret = drmModeAtomicAddProperty(pset, plane->id(),
-                                       plane->crtc_property().id(), 0) < 0 ||
-              drmModeAtomicAddProperty(pset, plane->id(), plane->fb_property().id(),
-                                       0) < 0;
-        if (ret) {
-          ALOGE("Failed to add plane %d disable to pset", plane->id());
-          drmModeAtomicFree(pset);
-          pthread_mutex_unlock(&diplay_route_mutex);
-          return ret;
-        }
-        HWC2_ALOGI("Crtc-id = %d disable plane-id = %d", crtc->id(), plane->id());
-      }
-    }
-
-    uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
-    ret = drmModeAtomicCommit(fd_.get(), pset, flags, this);
-    if (ret < 0) {
-      ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
-      drmModeAtomicFree(pset);
-      pthread_mutex_unlock(&diplay_route_mutex);
-      return ret;
+    current_mode.dump();
+    crtc->kernel_mode().dump();
+    if(DisableAllPlaneForCrtc(display_id, crtc, true, NULL)){
+      HWC2_ALOGW("display-id=%d crtc-id=%d display all plane fail!.", display_id, crtc->id());
     }
   }
 
   drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
   if (!pset) {
     ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return -ENOMEM;
   }
 
@@ -1372,8 +1400,11 @@ int DrmDevice::BindDpyRes(int display_id){
   struct drm_mode_modeinfo drm_mode;
   memset(&drm_mode, 0, sizeof(drm_mode));
   conn->current_mode().ToDrmModeModeInfo(&drm_mode);
-  ALOGD_IF(LogLevel(DBG_DEBUG),"%s,line=%d, current_mode id=%d , w=%d,h=%d",__FUNCTION__,__LINE__,
-            conn->current_mode().id(),conn->current_mode().h_display(),conn->current_mode().v_display());
+  HWC2_ALOGI("current_mode id=%d , w=%d,h=%d,fps=%f ",
+              conn->current_mode().id(),
+              conn->current_mode().h_display(),
+              conn->current_mode().v_display(),
+              conn->current_mode().v_refresh());
   CreatePropertyBlob(&drm_mode, sizeof(drm_mode), &blob_id[0]);
 
   // Enable DrmConnector DPMS on.
@@ -1393,33 +1424,166 @@ int DrmDevice::BindDpyRes(int display_id){
   if (ret < 0) {
     ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
     drmModeAtomicFree(pset);
-    pthread_mutex_unlock(&diplay_route_mutex);
+
     return ret;
   }
 
-  ALOGD_IF(LogLevel(DBG_DEBUG),"%s,line=%d, display-id=%d PowerOn success!.",__FUNCTION__,__LINE__,display_id);
+  HWC2_ALOGI("display-id=%d Bind Connector-id=%d Crtc-id=%d success!.",
+              display_id, conn->id(), crtc->id());
 
   DestroyPropertyBlob(blob_id[0]);
 
   conn->set_active_mode(conn->current_mode());
 
   drmModeAtomicFree(pset);
+  return 0;
+}
 
-  pthread_mutex_unlock(&diplay_route_mutex);
+// 关闭当前 Crtc 与 Connector 资源
+int DrmDevice::ReleaseConnectorAndCrtc(int display_id, DrmConnector* conn, DrmCrtc *crtc){
+  int ret;
+  if (!conn) {
+    HWC2_ALOGE("Failed to find display-id=%d connector", display_id);
+    return -EINVAL;
+  }
+
+  drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
+  if (!pset) {
+    ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
+    return -ENOMEM;
+  }
+  // 解绑需要关闭所有图层
+  if(DisableAllPlaneForCrtc(display_id, crtc, false, pset)){
+    HWC2_ALOGE("Failed to disable all plane for display %d", display_id);
+  }
+
+  // Disable DrmConnector resource.
+  // The note is due to HJC's suggestion that the DRM driver
+  // will actively call the DPMS_OFF interface when disconnecting the CRTC from the Connector,
+  // and no additional calls are required.
+  // conn->SetDpmsMode(DRM_MODE_DPMS_OFF);
+  DRM_ATOMIC_ADD_PROP(conn->id(), conn->crtc_id_property().id(), 0);
+  // Disable DrmCrtc resource.
+  DRM_ATOMIC_ADD_PROP(crtc->id(), crtc->mode_property().id(), 0);
+  DRM_ATOMIC_ADD_PROP(crtc->id(), crtc->active_property().id(), 0);
+
+  // AtomicCommit
+  uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+  ret = drmModeAtomicCommit(fd_.get(), pset, flags, this);
+  if (ret < 0) {
+    HWC2_ALOGW("display-id=%d %s-%d Crtc-id=%d Release fail! ret=%d",
+                display_id,
+                connector_type_str(conn->type()),
+                conn->type_id(),
+                crtc->id(),
+                ret);
+    drmModeAtomicFree(pset);
+    return ret;
+  }
+
+  HWC2_ALOGI("display-id=%d %s-%d Crtc-id=%d Release success!.", display_id,
+                                                                 connector_type_str(conn->type()),
+                                                                 conn->type_id(),
+                                                                 crtc->id());
+  drmModeAtomicFree(pset);
+  crtc->set_display(-1);
+  conn->set_encoder(NULL);
+  conn->set_hwc_state(HwcConnnectorStete::RELEASE_CRTC);
+  // 更新属性状态
+  char conn_name[50];
+  char property_conn_name[50];
+  snprintf(conn_name,50,"%s-%d:%d:release",connector_type_str(conn->type()),conn->type_id(),crtc->id());
+  snprintf(property_conn_name,50,"vendor.hwc.device.display-%d",display_id);
+  property_set(property_conn_name, conn_name);
+  return 0;
+}
+
+// 关闭所有 DrmPlane
+int DrmDevice::DisableAllPlaneForCrtc(int display_id,
+                                      DrmCrtc *crtc,
+                                      bool commit,
+                                      drmModeAtomicReqPtr pset){
+  int ret;
+  if(commit)
+    pset = drmModeAtomicAlloc();
+
+  if (!pset) {
+    ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
+    return -ENOMEM;
+  }
+  // Disable DrmPlane resource.
+  for(auto &plane_group : plane_groups_){
+    uint32_t crtc_mask = 1 << crtc->pipe();
+    if(!plane_group->acquire(crtc_mask))
+        continue;
+    for(auto &plane : plane_group->planes){
+      if(!plane)
+        continue;
+      ret = drmModeAtomicAddProperty(pset, plane->id(),
+                                      plane->crtc_property().id(), 0) < 0 ||
+            drmModeAtomicAddProperty(pset, plane->id(), plane->fb_property().id(),
+                                      0) < 0;
+      if (ret) {
+        HWC2_ALOGE("Failed to add plane %d disable to pset", plane->id());
+        return ret;
+      }
+      HWC2_ALOGD_IF_DEBUG("disable CRTC(%d), disable plane-id = %d", crtc->id(),plane->id());
+    }
+  }
+
+  if(commit){
+    // AtomicCommit
+    uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+    ret = drmModeAtomicCommit(fd_.get(), pset, flags, this);
+    if (ret < 0) {
+      ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
+      drmModeAtomicFree(pset);
+      return ret;
+    }
+  }
+  return 0;
+}
+
+// Bind DrmConnector and DrmCrtc resource.
+int DrmDevice::BindDpyRes(int display_id){
+  std::lock_guard<std::mutex> lock(mtx_);
+  DrmConnector *conn = GetConnectorForDisplay(display_id);
+  // 1. 检查 Connector 状态
+  int ret = CheckConnectorState(display_id, conn);
+  if(ret){
+    return ret;
+  }
+
+  // 2. 获取可用的 crtc 资源
+  DrmCrtc *crtc = NULL;
+  ret = FindAvailableCrtc(display_id, conn, &crtc);
+  if(ret){
+    return ret;
+  }
+
+  // 3. 绑定 Connector and Crtc 资源并使能
+  ret = BindConnectorAndCrtc(display_id, conn, crtc);
+  if(ret){
+    return ret;
+  }
+
+  // 4. 绑定 DrmPlane 资源
+  ret = hwcPlatform_->TryAssignPlane(this);
+  if(ret){
+    HWC2_ALOGW("TryAssignPlane fail, ret = %d", ret);
+    return ret;
+  }
   return 0;
 }
 
 // Release DrmConnector and DrmCrtc resource.
 int DrmDevice::ReleaseDpyRes(int display_id){
-  pthread_mutex_lock(&diplay_route_mutex);
-
+  std::lock_guard<std::mutex> lock(mtx_);
   int ret;
-
   DrmConnector *conn = GetConnectorForDisplay(display_id);
   if (!conn) {
     ALOGE("%s:line=%d Failed to find display-id=%d connector\n",
           __FUNCTION__, __LINE__,display_id);
-    pthread_mutex_unlock(&diplay_route_mutex);
     return -EINVAL;
   }
 
@@ -1431,11 +1595,9 @@ int DrmDevice::ReleaseDpyRes(int display_id){
     snprintf(property_conn_name,50,"vendor.hwc.device.display-%d",display_id);
     property_set(property_conn_name, conn_name);
 
-
     drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
     if (!pset) {
       ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
-      pthread_mutex_unlock(&diplay_route_mutex);
       return -ENOMEM;
     }
 
@@ -1447,27 +1609,7 @@ int DrmDevice::ReleaseDpyRes(int display_id){
     DRM_ATOMIC_ADD_PROP(conn->id(), conn->crtc_id_property().id(), 0);
 
     // Disable DrmPlane resource.
-    for(auto &plane_group : plane_groups_){
-      uint32_t crtc_mask = 1 << crtc->pipe();
-      if(!plane_group->acquire(crtc_mask))
-          continue;
-      for(auto &plane : plane_group->planes){
-        if(!plane)
-          continue;
-        ret = drmModeAtomicAddProperty(pset, plane->id(),
-                                       plane->crtc_property().id(), 0) < 0 ||
-              drmModeAtomicAddProperty(pset, plane->id(), plane->fb_property().id(),
-                                       0) < 0;
-        if (ret) {
-          ALOGE("Failed to add plane %d disable to pset", plane->id());
-          drmModeAtomicFree(pset);
-          pthread_mutex_unlock(&diplay_route_mutex);
-          return ret;
-        }
-        ALOGD_IF(LogLevel(DBG_DEBUG),"%s,line=%d, disable CRTC(%d), disable plane-id = %d",__FUNCTION__,__LINE__,
-        crtc->id(),plane->id());
-      }
-    }
+    DisableAllPlaneForCrtc(display_id, crtc, false, pset);
 
     // Disable DrmCrtc resource.
     DRM_ATOMIC_ADD_PROP(crtc->id(), crtc->mode_property().id(), 0);
@@ -1479,18 +1621,25 @@ int DrmDevice::ReleaseDpyRes(int display_id){
     if (ret < 0) {
       ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
       drmModeAtomicFree(pset);
-      pthread_mutex_unlock(&diplay_route_mutex);
+
       return ret;
     }
 
-    ALOGD_IF(LogLevel(DBG_DEBUG),"%s,line=%d, display-id=%d PowerDown success!.",__FUNCTION__,__LINE__,display_id);
+    HWC2_ALOGI("display-id=%d PowerDown success!.", display_id);
 
     drmModeAtomicFree(pset);
     crtc->set_display(-1);
     conn->set_encoder(NULL);
   }
 
-  pthread_mutex_unlock(&diplay_route_mutex);
+  // 4. 绑定 DrmPlane 资源
+  ret = hwcPlatform_->TryAssignPlane(this);
+  if(ret){
+    HWC2_ALOGW("TryAssignPlane fail, ret = %d", ret);
+    return ret;
+  }
+
+
   return 0;
 }
 

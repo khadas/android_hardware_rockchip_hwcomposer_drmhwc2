@@ -380,7 +380,6 @@ bool DrmCrtc::get_next_hdr() const {
 }
 
 const DrmMode &DrmCrtc::kernel_mode() const {
-  mode_.dump();
   return mode_;
 }
 

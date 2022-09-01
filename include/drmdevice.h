@@ -25,7 +25,6 @@
 #include "platform.h"
 #include "rockchip/drmbaseparameter.h"
 #include "rockchip/drmxml.h"
-
 #include <stdint.h>
 #include <tuple>
 
@@ -159,6 +158,17 @@ class DrmDevice {
   int CreateDisplayPipe(DrmConnector *connector);
   int AttachWriteback(DrmConnector *display_conn);
 
+  // 检查 Connector 状态
+  int CheckConnectorState(int display_id, DrmConnector *conn);
+  // 绑定 Connector 与 Crtc 资源
+  int BindConnectorAndCrtc(int display_id, DrmConnector* conn, DrmCrtc* crtc);
+  // 获取可用的 Crtc 资源
+  int FindAvailableCrtc(int display_id, DrmConnector *conn, DrmCrtc** out_crtc);
+  // 释放 Connector 与 Crtc 资源
+  int ReleaseConnectorAndCrtc(int display_id, DrmConnector* conn, DrmCrtc *crtc);
+  // 关闭当前 Crtc 与 Connector 资源
+  int DisableAllPlaneForCrtc(int display_id, DrmCrtc *crtc,
+                             bool commit, drmModeAtomicReqPtr pset);
   UniqueFd fd_;
   int soc_id_;
   // Kernel 4.19 = 2.0.0
@@ -177,6 +187,7 @@ class DrmDevice {
   std::vector<std::unique_ptr<DrmPlane>> planes_;
   std::vector<DrmPlane*> sort_planes_;
   std::vector<PlaneGroup*> plane_groups_;
+  std::unique_ptr<HwcPlatform> hwcPlatform_;
   DrmEventListener event_listener_;
   DrmBaseparameter baseparameter_;
 
@@ -185,6 +196,8 @@ class DrmDevice {
   std::map<int, int> displays_;
   std::vector<DrmMode> white_modes_;
   struct DisplayModeXml DmXml_;
+
+  mutable std::mutex mtx_;
 };
 }  // namespace android
 

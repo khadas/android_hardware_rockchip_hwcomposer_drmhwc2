@@ -55,14 +55,17 @@ struct assign_plane_group_356x assign_mask_default_356x[] = {
   { -1 , DRM_PLANE_TYPE_ESMART1_WIN0, false},
 };
 
-int Hwc356x::assignPlaneByHWC(DrmDevice* drm, const std::set<int> &active_display){
+int Hwc356x::assignPlaneByHWC(DrmDevice* drm){
   HWC2_ALOGW("Crtc PlaneMask not set, have to use HwcPlaneMask, please check Crtc::PlaneMask info.");
   std::vector<PlaneGroup*> all_plane_group = drm->GetPlaneGroups();
-  for(auto &display_id : active_display){
+  for (auto &conn : drm->connectors()) {
+    if(conn->state() != DRM_MODE_CONNECTED)
+      continue;
+    int display_id = conn->display();
     DrmCrtc *crtc = drm->GetCrtcForDisplay(display_id);
     if(!crtc){
-        ALOGE("%s,line=%d crtc is NULL.",__FUNCTION__,__LINE__);
-        return -1;
+        HWC2_ALOGE("display=%d crtc is NULL.",display_id);
+        continue;
     }
 
     uint64_t plane_mask=0;
@@ -102,20 +105,18 @@ int Hwc356x::assignPlaneByHWC(DrmDevice* drm, const std::set<int> &active_displa
   return 0;
 }
 
-int Hwc356x::assignPlaneByPlaneMask(DrmDevice* drm, const std::set<int> &active_display){
+int Hwc356x::assignPlaneByPlaneMask(DrmDevice* drm){
   std::vector<PlaneGroup*> all_plane_group = drm->GetPlaneGroups();
   // First, assign active display plane_mask
-  for(auto &display_id : active_display){
+  for (auto &conn : drm->connectors()) {
+    if(conn->state() != DRM_MODE_CONNECTED)
+      continue;
+
+    int display_id = conn->display();
     DrmCrtc *crtc = drm->GetCrtcForDisplay(display_id);
     if(!crtc){
-        ALOGE("%s,line=%d crtc is NULL.",__FUNCTION__,__LINE__);
-        return -1;
-    }
-
-    DrmConnector *conn = drm->GetConnectorForDisplay(display_id);
-    if(!conn){
-        ALOGE("%s,line=%d connector is NULL.",__FUNCTION__,__LINE__);
-        return -1;
+        HWC2_ALOGE("display=%d crtc is NULL.", display_id);
+        continue;
     }
 
     // Connector SplitMode
@@ -127,12 +128,10 @@ int Hwc356x::assignPlaneByPlaneMask(DrmDevice* drm, const std::set<int> &active_
       for(auto &plane_group : all_plane_group){
         uint64_t plane_group_win_type = plane_group->win_type;
         if(((plane_mask & plane_group_win_type) == plane_group_win_type)){
-          if(display_id < DRM_CONNECTOR_SPILT_MODE_MASK &&
-              (plane_group_win_type & DRM_PLANE_TYPE_ALL_CLUSTER_MASK) > 0)
+          if((plane_group_win_type & DRM_PLANE_TYPE_ALL_CLUSTER_MASK) > 0)
             plane_group->set_current_crtc(crtc_mask, display_id);
-          else if(display_id >= DRM_CONNECTOR_SPILT_MODE_MASK &&
-                   (plane_group_win_type & DRM_PLANE_TYPE_ALL_ESMART_MASK) > 0)
-            plane_group->set_current_crtc(crtc_mask, display_id);
+          else if((plane_group_win_type & DRM_PLANE_TYPE_ALL_ESMART_MASK) > 0)
+            plane_group->set_current_crtc(crtc_mask, display_id + DRM_CONNECTOR_SPILT_MODE_MASK);
         }
       }
     }else{ // Normal Mode
@@ -157,18 +156,18 @@ int Hwc356x::assignPlaneByPlaneMask(DrmDevice* drm, const std::set<int> &active_
   return 0;
 }
 
-int Hwc356x::TryAssignPlane(DrmDevice* drm, const std::set<int> &active_display){
+int Hwc356x::TryAssignPlane(DrmDevice* drm){
   int ret = -1;
   bool exist_plane_mask = false;
-  for(auto &display_id : active_display){
+  for (auto &conn : drm->connectors()) {
+    if(conn->state() != DRM_MODE_CONNECTED)
+      continue;
+    int display_id = conn->display();
     DrmCrtc *crtc = drm->GetCrtcForDisplay(display_id);
     if(!crtc){
       ALOGE("%s,line=%d crtc is NULL.",__FUNCTION__,__LINE__);
       continue;
     }
-
-    ALOGI_IF(DBG_INFO,"%s,line=%d, active_display_num = %zu, display=%d",
-                                 __FUNCTION__,__LINE__, active_display.size(),display_id);
 
     if(crtc->get_plane_mask() > 0){
       exist_plane_mask = true;
@@ -176,9 +175,9 @@ int Hwc356x::TryAssignPlane(DrmDevice* drm, const std::set<int> &active_display)
   }
 
   if(exist_plane_mask){
-    assignPlaneByPlaneMask(drm, active_display);
+    assignPlaneByPlaneMask(drm);
   }else{
-    assignPlaneByHWC(drm, active_display);
+    assignPlaneByHWC(drm);
   }
 
   return ret;

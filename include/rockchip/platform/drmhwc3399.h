@@ -53,8 +53,8 @@ class Hwc3399 : public HwcPlatform::Platform {
   void Init();
   bool SupportPlatform(uint32_t soc_id);
   // Try to assign DrmPlane to display
-  int TryAssignPlane(DrmDevice* drm, const std::set<int> &active_display);
-  int assignPlaneByPlaneMask(DrmDevice* drm, const std::set<int> &active_display);
+  int TryAssignPlane(DrmDevice* drm);
+  int assignPlaneByPlaneMask(DrmDevice* drm);
  private:
 
 };

@@ -121,9 +121,6 @@ DrmDisplayCompositor::~DrmDisplayCompositor() {
 }
 
 int DrmDisplayCompositor::Init(ResourceManager *resource_manager, int display) {
-  if(initialized_)
-    return 0;
-
   resource_manager_ = resource_manager;
   display_ = display;
   DrmDevice *drm = resource_manager_->GetDrmDevice(display);
@@ -131,6 +128,10 @@ int DrmDisplayCompositor::Init(ResourceManager *resource_manager, int display) {
     ALOGE("Could not find drmdevice for display %d",display);
     return -EINVAL;
   }
+
+  if(initialized_)
+    return 0;
+
   int ret = pthread_mutex_init(&lock_, NULL);
   if (ret) {
     ALOGE("Failed to initialize drm compositor lock %d\n", ret);
@@ -245,7 +246,7 @@ int DrmDisplayCompositor::QueueComposition(
     case DRM_COMPOSITION_TYPE_EMPTY:
       return 0;
     default:
-      ALOGE("Unknown composition type %d/%d", composition->type(), display_);
+      ALOGE("Unknown composition type %d/%d", composition->type(), composition->display());
       return -ENOENT;
   }
 
@@ -258,7 +259,7 @@ int DrmDisplayCompositor::QueueComposition(
     return ret;
   }
 
-
+  display_ = composition->display();
   // Block the queue if it gets too large. Otherwise, SurfaceFlinger will start
   // to eat our buffer handles when we get about 1 second behind.
   int max_queue_size = 1;
@@ -1019,7 +1020,7 @@ int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
   return ret;
 }
 
-void DrmDisplayCompositor::CollectInfo(
+int DrmDisplayCompositor::CollectInfo(
     std::unique_ptr<DrmDisplayComposition> composition,
     int status, bool writeback) {
   ATRACE_CALL();
@@ -1028,7 +1029,7 @@ void DrmDisplayCompositor::CollectInfo(
     pset_ = drmModeAtomicAlloc();
     if (!pset_) {
       ALOGE("Failed to allocate property set");
-      return ;
+      return -1 ;
     }
   }
 
@@ -1036,7 +1037,7 @@ void DrmDisplayCompositor::CollectInfo(
   if (!ret && !clear_) {
     if (writeback && !CountdownExpired()) {
       ALOGE("Abort playing back scene");
-      return;
+      return -1;
     }
     ret = CollectCommitInfo(pset_, composition.get(), false);
   }
@@ -1045,10 +1046,10 @@ void DrmDisplayCompositor::CollectInfo(
     ALOGE("Composite failed for display %d", display_);
     // Disable the hw used by the last active composition. This allows us to
     // signal the release fences from that composition to avoid hanging.
-    ClearDisplay();
-    return;
+    return ret;
   }
   collect_composition_map_.insert(std::make_pair<int,std::unique_ptr<DrmDisplayComposition>>(composition->display(),std::move(composition)));
+  return 0;
 }
 
 void DrmDisplayCompositor::Commit() {
