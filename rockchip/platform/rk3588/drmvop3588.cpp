@@ -1341,8 +1341,23 @@ int Vop3588::TryRgaOverlayPolicy(
 
   for(auto &drmLayer : layers){
     if(drmLayer->bYuv_){
-        ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         if(last_buffer_id != drmLayer->uBufferId_){
+          // TODO: afbc 暂时不支持 crop 裁剪，目前会出现RGA输出花屏问题
+          if(drmLayer->bAfbcd_){
+            int crop_w =  (int)(drmLayer->source_crop.right - drmLayer->source_crop.left);
+            if(crop_w != drmLayer->iStride_){
+              HWC2_ALOGD_IF_DEBUG("RGA can't handle crop_w=%d stride=%d afbc yuv layer.",
+                         crop_w, drmLayer->iStride_);
+              continue;
+            }
+          }
+
+          // TODO: RGA 最大宽度仅支持8176
+          if(drmLayer->iWidth_ > 8176){
+            HWC2_ALOGD_IF_DEBUG("RGA can't handle iWidth_=%d yuv layer, rga max is 8176.",
+                        drmLayer->iWidth_);
+            continue;
+          }
 
           bool rga_scale_max = false;
           int  scale_max_rate = 4;
