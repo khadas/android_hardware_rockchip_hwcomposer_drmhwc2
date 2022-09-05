@@ -247,9 +247,11 @@ int Vop3588::TryHwcPolicy(
       return 0;
     else{
       ALOGD_IF(LogLevel(DBG_DEBUG),"Match rga policy fail, try to match other policy.");
+      mLastMode_ = SvepMode::UN_SUPPORT;
     }
   }
 #endif
+
   // Try to match overlay policy
   if(ctx.state.setHwcPolicy.count(HWC_OVERLAY_LOPICY)){
     ret = TryOverlayPolicy(composition,layers,crtc,plane_groups);
