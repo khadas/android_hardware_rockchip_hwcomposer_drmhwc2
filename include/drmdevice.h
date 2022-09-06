@@ -164,11 +164,31 @@ class DrmDevice {
   int BindConnectorAndCrtc(int display_id, DrmConnector* conn, DrmCrtc* crtc);
   // 获取可用的 Crtc 资源
   int FindAvailableCrtc(int display_id, DrmConnector *conn, DrmCrtc** out_crtc);
+  // 获取可用的 Crtc资源, 寻找空闲资源
+  int FindAvailableCrtcByFirst(int display_id, DrmConnector *conn, DrmCrtc** out_crtc);
+  // 获取可用的 Crtc 资源，寻找可Mirror的资源
+  int FindAvailableCrtcByMirror(int display_id, DrmConnector *conn, DrmCrtc** out_crtc);
+  // 获取可用的 Crtc 资源， 竞争资源
+  int FindAvailableCrtcByCompete(int display_id, DrmConnector *conn, DrmCrtc** out_crtc);
   // 释放 Connector 与 Crtc 资源
   int ReleaseConnectorAndCrtc(int display_id, DrmConnector* conn, DrmCrtc *crtc);
+  // 释放 Connector 与 Crtc 资源
+  int ReleaseConnectorAndCrtcNoCommit(int display_id,
+                                      DrmConnector* conn,
+                                      DrmCrtc *crtc,
+                                      drmModeAtomicReqPtr pset);
+int ReleaseDpyResByNormal(int display_id,
+                          DrmConnector* conn,
+                          DrmCrtc* crtc);
+int ReleaseDpyResByMirror(int display_id,
+                          DrmConnector* conn,
+                          DrmCrtc* crtc);
+
   // 关闭当前 Crtc 与 Connector 资源
   int DisableAllPlaneForCrtc(int display_id, DrmCrtc *crtc,
                              bool commit, drmModeAtomicReqPtr pset);
+
+
   UniqueFd fd_;
   int soc_id_;
   // Kernel 4.19 = 2.0.0

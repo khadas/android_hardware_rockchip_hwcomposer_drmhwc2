@@ -896,10 +896,25 @@ drmModeConnection DrmConnector::state() {
   return state_;
 }
 
+bool DrmConnector::hwc_state_change_and_plug(){
+  if(plug_){
+    plug_ = false;
+    return true;
+  }
+  return false;
+}
+
 HwcConnnectorStete DrmConnector::hwc_state(){
   return hwc_state_;
 }
+
 int DrmConnector::set_hwc_state(HwcConnnectorStete state){
+  if(state == NORMAL &&
+     (hwc_state_ == NO_CRTC ||
+      hwc_state_ == RELEASE_CRTC ||
+      hwc_state_ == MIRROR_CRTC)){
+    plug_ = true;
+  }
   hwc_state_ = state;
   return 0;
 }
@@ -1089,4 +1104,25 @@ int DrmConnector::getCropInfo(int32_t *srcX, int32_t *srcY, int32_t *srcW, int32
   *srcH = SrcH_;
   return 0;
 }
+
+void DrmConnector::addMirrorDisplay(DrmCrtc* crtc, int display){
+  if(mMapCrtcDisplays_.count(crtc)){
+    auto search = mMapCrtcDisplays_.find(crtc);
+    if(search != mMapCrtcDisplays_.end()){
+      search->second.push_back(display);
+    }
+  }else{
+    mMapCrtcDisplays_[crtc] = {display};
+  }
+}
+std::vector<int>* DrmConnector::getMirrorDisplayVectorForCrtc(DrmCrtc* crtc){
+  if(mMapCrtcDisplays_.count(crtc)){
+    auto search = mMapCrtcDisplays_.find(crtc);
+    if(search != mMapCrtcDisplays_.end()){
+      return &(search->second);
+    }
+  }
+  return NULL;
+}
+
 }  // namespace android

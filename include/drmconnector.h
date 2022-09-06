@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <xf86drmMode.h>
 #include <vector>
-
+#include <map>
 namespace android {
 
 #define DRM_CONNECTOR_SPILT_MODE_MASK 0xf0
@@ -109,6 +109,7 @@ class DrmConnector {
   drmModeConnection state();
   HwcConnnectorStete hwc_state();
   int set_hwc_state(HwcConnnectorStete state);
+  bool hwc_state_change_and_plug();
 
   uint32_t mm_width() const;
   uint32_t mm_height() const;
@@ -152,6 +153,9 @@ class DrmConnector {
   struct hdr_static_metadata* get_hdr_metadata_ptr(){ return &hdr_metadata_; };
   const struct disp_info* baseparameter_info(){ return baseparameter_ready_ ? &baseparameter_ : NULL; }
 
+  void addMirrorDisplay(DrmCrtc* crtc, int display);
+  std::vector<int>* getMirrorDisplayVectorForCrtc(DrmCrtc* crtc);
+
  private:
   DrmDevice *drm_;
 
@@ -165,6 +169,7 @@ class DrmConnector {
   uint32_t priority_;
   drmModeConnection state_;
   HwcConnnectorStete hwc_state_;
+  bool plug_;
 
   uint32_t mm_width_;
   uint32_t mm_height_;
@@ -238,6 +243,8 @@ class DrmConnector {
   int32_t SrcW_=0;
   int32_t SrcH_=0;
 
+  // Connector mirror
+  std::map<DrmCrtc*, std::vector<int>> mMapCrtcDisplays_;
 };
 }  // namespace android
 

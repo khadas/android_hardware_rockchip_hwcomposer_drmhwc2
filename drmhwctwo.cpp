@@ -3270,8 +3270,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
       drmModeConnection cur_state = conn->state();
       HwcConnnectorStete cur_hwc_state = conn->hwc_state();
       if(cur_state == DRM_MODE_CONNECTED){
-        if(cur_hwc_state == RELEASE_CRTC ||
-           cur_hwc_state == NO_CRTC){
+        if(conn->hwc_state_change_and_plug()){
           int display_id = conn->display();
           auto &display = hwc2_->displays_.at(display_id);
           ret |= (int32_t)display.HoplugEventTmeline();
