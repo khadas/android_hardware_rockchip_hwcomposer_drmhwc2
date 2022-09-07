@@ -2676,7 +2676,7 @@ int DrmHwcTwo::HwcDisplay::DoMirrorDisplay(int32_t *retire_fence){
   int32_t merge_rt_fence;
   int32_t display_cnt = 1;
   for (auto &conn : drm_->connectors()) {
-    if(!connector_->isCropSpilt()){
+    if(!conn->isCropSpilt()){
       continue;
     }
     int display_id = conn->display();
