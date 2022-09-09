@@ -2058,7 +2058,15 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetPowerMode(int32_t mode_in) {
       }
     }
   }else{
-    int ret = drm_->BindDpyRes(handle_);
+    int ret = connector_->UpdateModes();
+    if (ret) {
+      HWC2_ALOGE("Failed to UpdateModes for display=%" PRIu64 " ret=%d\n", handle_, ret);
+    }
+    ret = UpdateDisplayMode();
+    if (ret) {
+      HWC2_ALOGE("Failed to UpdateDisplayMode for display=%" PRIu64 " ret=%d\n", handle_, ret);
+    }
+    ret = drm_->BindDpyRes(handle_);
     if (ret) {
       HWC2_ALOGE("Failed to BindDpyRes for display=%" PRIu64 " ret=%d\n", handle_, ret);
     }

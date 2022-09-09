@@ -376,6 +376,7 @@ int DrmConnector::UpdateModes() {
 
   return 0;
 }
+
 int DrmConnector::UpdateDisplayMode(int display_id, int update_base_timeline){
   char resolution_value[PROPERTY_VALUE_MAX]={0};
   char resolution_property[PROPERTY_VALUE_MAX]={0};
