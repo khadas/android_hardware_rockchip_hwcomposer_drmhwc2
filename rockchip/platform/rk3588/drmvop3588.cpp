@@ -1419,9 +1419,14 @@ int Vop3588::TryRgaOverlayPolicy(
           src.fd      = drmLayer->iFd_;
           src.width   = drmLayer->iWidth_;
           src.height  = drmLayer->iHeight_;
-          src.wstride = drmLayer->iStride_;
           src.hstride = drmLayer->iHeight_;
           src.format  = drmLayer->iFormat_;
+
+          // RGA 的特殊修改，需要通过 wstride
+          if(drmLayer->uFourccFormat_ == DRM_FORMAT_NV15)
+            src.wstride = drmLayer->iByteStride_;
+          else
+            src.wstride = drmLayer->iStride_;
 
           if(drmLayer->iFormat_ == HAL_PIXEL_FORMAT_YUV420_8BIT_I){
             src.format = HAL_PIXEL_FORMAT_YCrCb_NV12;
@@ -2293,6 +2298,7 @@ int Vop3588::TryMixPolicy(
     std::vector<PlaneGroup *> &plane_groups) {
   ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
   int ret;
+
 
   if(ctx.state.setHwcPolicy.count(HWC_SIDEBAND_LOPICY)){
     ret = TryMixSidebandPolicy(composition,layers,crtc,plane_groups);

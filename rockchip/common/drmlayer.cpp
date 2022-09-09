@@ -693,17 +693,17 @@ std::string DrmHwcLayer::BlendingToString(DrmHwcBlending blending) const{
 
 int DrmHwcLayer::DumpInfo(String8 &out){
     if(bFbTarget_)
-      out.appendFormat( "DrmHwcFBtar[%4u] Buffer[w/h/s/format]=[%4d,%4d,%4d,%4d] Fourcc=%c%c%c%c Transform=%-8.8s(0x%x) Blend[a=%d]=%-8.8s "
+      out.appendFormat( "DrmHwcFBtar[%4u] Buffer[w/h/s/bs/format]=[%4d,%4d,%4d,%4d,%4d] Fourcc=%c%c%c%c Transform=%-8.8s(0x%x) Blend[a=%d]=%-8.8s "
                     "source_crop[l,t,r,b]=[%5.0f,%5.0f,%5.0f,%5.0f] display_frame[l,t,r,b]=[%4d,%4d,%4d,%4d],afbcd=%d hdr=%d\n",
-                   uId_,iWidth_,iHeight_,iStride_,iFormat_,uFourccFormat_,uFourccFormat_>>8,uFourccFormat_>>16,uFourccFormat_>>24,
+                   uId_,iWidth_,iHeight_,iStride_,iByteStride_,iFormat_,uFourccFormat_,uFourccFormat_>>8,uFourccFormat_>>16,uFourccFormat_>>24,
                    TransformToString(transform).c_str(),transform,alpha,BlendingToString(blending).c_str(),
                    source_crop.left,source_crop.top,source_crop.right,source_crop.bottom,
                    display_frame.left,display_frame.top,display_frame.right,display_frame.bottom,bAfbcd_,
                    bHdr_);
     else
-      out.appendFormat( "DrmHwcLayer[%4u] Buffer[w/h/s/format]=[%4d,%4d,%4d,%4d] Fourcc=%c%c%c%c Transform=%-8.8s(0x%x) Blend[a=%d]=%-8.8s "
+      out.appendFormat( "DrmHwcLayer[%4u] Buffer[w/h/s/bs/format]=[%4d,%4d,%4d,%4d,%4d] Fourcc=%c%c%c%c Transform=%-8.8s(0x%x) Blend[a=%d]=%-8.8s "
                         "source_crop[l,t,r,b]=[%5.0f,%5.0f,%5.0f,%5.0f] display_frame[l,t,r,b]=[%4d,%4d,%4d,%4d],skip=%d,afbcd=%d hdr=%d\n",
-                       uId_,iWidth_,iHeight_,iStride_,iFormat_,uFourccFormat_,uFourccFormat_>>8,uFourccFormat_>>16,uFourccFormat_>>24,
+                       uId_,iWidth_,iHeight_,iStride_,iByteStride_,iFormat_,uFourccFormat_,uFourccFormat_>>8,uFourccFormat_>>16,uFourccFormat_>>24,
                        TransformToString(transform).c_str(),transform,alpha,BlendingToString(blending).c_str(),
                        source_crop.left,source_crop.top,source_crop.right,source_crop.bottom,
                        display_frame.left,display_frame.top,display_frame.right,display_frame.bottom,bSkipLayer_,bAfbcd_,
