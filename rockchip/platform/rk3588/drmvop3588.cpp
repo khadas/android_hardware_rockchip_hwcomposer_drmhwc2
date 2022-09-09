@@ -210,15 +210,15 @@ bool Vop3588::SvepAllowedByLocalPolicy(DrmHwcLayer* layer){
   }
 
   // 视频屏幕占比60%以下不使用SVEP
-  int allow_rate = hwc_get_int_property("vendor.hwc.disable_svep_dis_area_rate","60");
-  int dis_w = layer->display_frame.right - layer->display_frame.left;
-  int dis_h = layer->display_frame.bottom - layer->display_frame.top;
-  int dis_area_size = dis_w * dis_h;
-  int screen_size = ctx.state.iDisplayWidth_ * ctx.state.iDisplayHeight_;
+  uint64_t allow_rate = hwc_get_int_property("vendor.hwc.disable_svep_dis_area_rate","60");
+  uint64_t dis_w = layer->display_frame.right - layer->display_frame.left;
+  uint64_t dis_h = layer->display_frame.bottom - layer->display_frame.top;
+  uint64_t dis_area_size = dis_w * dis_h;
+  uint64_t screen_size = ctx.state.iDisplayWidth_ * ctx.state.iDisplayHeight_;
   // 100 表示屏占比 100%，
-  int video_area_rate = dis_area_size * 100 / screen_size;
+  uint64_t video_area_rate = dis_area_size * 100 / screen_size;
   if(video_area_rate < allow_rate){
-    HWC2_ALOGD_IF_DEBUG("disable-svep: video_area_rate=%d name=%s",video_area_rate, layer->sLayerName_.c_str());
+    HWC2_ALOGD_IF_DEBUG("disable-svep: video_area_rate=%" PRIu64 " name=%s",video_area_rate, layer->sLayerName_.c_str());
     return false;
   }
 
