@@ -83,6 +83,8 @@ int ResourceManager::Init(DrmHwcTwo *hwc2) {
     return ret ? -EINVAL : ret;
   }
 
+  // 更新配置
+  InitProperty();
   return 0;
 }
 
