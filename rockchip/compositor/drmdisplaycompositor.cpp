@@ -1542,6 +1542,14 @@ void DrmDisplayCompositor::ClearDisplay() {
   if (lock.Lock())
     return;
 
+  // Bug: #363288 #361559
+  // 清空 DrmDisplayComposition 前需要将已经送显的图层统一关闭后再进行RMFB
+  // 如果上层直接 RMFB 的话，底层会自动关闭对应图层，因为关闭有先后顺序
+  // 可能会导致屏幕非预期闪屏，例如zpos=1先被关闭，zpos=0图层就显示到屏幕上一帧
+  for(auto &map : active_composition_map_){
+    if(map.second != NULL)
+      SingalCompsition(std::move(map.second));
+  }
   active_composition_map_.clear();
 
   //Singal the remainder fences in composite queue.
