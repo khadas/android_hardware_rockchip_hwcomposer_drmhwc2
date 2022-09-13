@@ -114,6 +114,7 @@ class DrmDevice {
   int UpdateDisplay3DLut(int display_id);
   int UpdateDisplayGamma(int display_id);
   int UpdateDisplayMode(int display_id);
+  int UpdateVrrRefreshRate(int display_id, int refresh_rate);
   int BindDpyRes(int display_id);
   int ReleaseDpyRes(int display_id);
   void ClearDisplay(void);

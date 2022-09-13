@@ -374,7 +374,37 @@ int DrmConnector::UpdateModes() {
 
   drmModeFreeConnector(c);
 
+  // VRR
+  UpdateVrrModes();
+
   return 0;
+}
+
+int DrmConnector::UpdateVrrModes(){
+
+  if(!encoder() || !(encoder()->crtc()) || encoder()->crtc()->variable_refresh_rate().id() == 0){
+    return 0;
+  }
+
+  if(modes_.size() != 1){
+    return 0;
+  }
+
+  int ret = 0;
+  vrr_modes_.clear();
+
+  DrmCrtc* crtc = encoder()->crtc();
+  uint64_t min_refresh_rate = 0;
+  uint64_t max_refresh_rate = 0;
+  std::tie(ret, min_refresh_rate) = crtc->min_refresh_rate().value();
+  std::tie(ret, max_refresh_rate) = crtc->max_refresh_rate().value();
+
+  for(int fps = max_refresh_rate ; fps >= min_refresh_rate ; fps -= 10){
+    vrr_modes_.push_back(fps);
+  }
+
+  return 0;
+
 }
 
 int DrmConnector::UpdateDisplayMode(int display_id, int update_base_timeline){

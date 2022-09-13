@@ -74,7 +74,8 @@ class DrmCrtc {
   const DrmProperty &max_refresh_rate() const;
   const DrmProperty &min_refresh_rate() const;
 
- DrmDevice *getDrmDevice(){ return drm_; }
+  DrmDevice *getDrmDevice(){ return drm_; }
+  bool is_vrr(){ return variable_refresh_rate().id() > 0; };
 
  private:
   DrmDevice *drm_;

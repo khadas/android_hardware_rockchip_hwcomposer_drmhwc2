@@ -387,6 +387,14 @@ HWC2::Error DrmHwcTwo::HwcDisplay::Init() {
     return HWC2::Error::BadDisplay;
   }
 
+  // VRR
+  ret = connector_->UpdateModes();
+  if(ret){
+    ALOGE("Failed to update display modes %d", ret);
+    return HWC2::Error::BadDisplay;
+  }
+  bVrrDisplay_ = crtc_->is_vrr();
+
   planner_ = Planner::CreateInstance(drm_);
   if (!planner_) {
     ALOGE("Failed to create planner instance for composition");
@@ -481,6 +489,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CheckStateAndReinit(bool clear_layer) {
     ALOGE("Failed to get crtc for display %d", display);
     return HWC2::Error::BadDisplay;
   }
+
+  bVrrDisplay_ = crtc_->is_vrr();
 
   ret = drm_->UpdateDisplayGamma(handle_);
   if (ret) {
@@ -784,6 +794,12 @@ HWC2::Error DrmHwcTwo::HwcDisplay::GetDisplayAttribute(hwc2_config_t config,
     int w = ctx_.framebuffer_width;
     int h = ctx_.framebuffer_height;
     int vrefresh = ctx_.vrefresh;
+    // VRR
+    const std::vector<int> vrr_mode = connector_->vrr_modes();
+    if(bVrrDisplay_ && vrr_mode.size() > 1
+       && config <= vrr_mode.size()){
+      vrefresh = vrr_mode[config];
+    }
     auto attribute = static_cast<HWC2::Attribute>(attribute_in);
     switch (attribute) {
       case HWC2::Attribute::Width:
@@ -989,12 +1005,26 @@ HWC2::Error DrmHwcTwo::HwcDisplay::GetDisplayConfigs(uint32_t *num_configs,
         property_set( "vendor.gralloc.no_afbc_for_fb_target_layer", "1");
       }
     }
-    if (!configs) {
+
+    const std::vector<int> vrr_mode = connector_->vrr_modes();
+    if(bVrrDisplay_ && vrr_mode.size() > 1){
+      if (!configs) {
+        *num_configs = vrr_mode.size();
+        return HWC2::Error::None;
+      }
+      *num_configs = vrr_mode.size();
+      int index = 0;
+      for(int index = 0 ; index <= vrr_mode.size(); index++){
+        configs[index] = index;
+      }
+    }else{
+      if (!configs) {
+        *num_configs = 1;
+        return HWC2::Error::None;
+      }
       *num_configs = 1;
-      return HWC2::Error::None;
+      configs[0] = 0;
     }
-    *num_configs = 1;
-    configs[0] = 0;
   }
 
   return HWC2::Error::None;
@@ -1852,7 +1882,6 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetActiveConfig(hwc2_config_t config) {
                               .bottom = mode->v_display() + 0.0f};
     client_layer_.SetLayerSourceCrop(source_crop);
 
-
     drm_->UpdateDisplayMode(handle_);
     // SetDisplayModeInfo cost 2.5ms - 5ms, a A few cases cost 10ms - 20ms
     connector_->SetDisplayModeInfo(handle_);
@@ -1884,9 +1913,30 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetActiveConfig(hwc2_config_t config) {
                                 .bottom = ctx_.framebuffer_height + 0.0f};
       client_layer_.SetLayerSourceCrop(source_crop);
     }
+    // VRR
+    UpdateRefreshRate(config);
   }
 
   return HWC2::Error::None;
+}
+
+HWC2::Error DrmHwcTwo::HwcDisplay::UpdateRefreshRate(hwc2_config_t config) {
+  HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 " config=%d", handle_, config);
+  if(!bVrrDisplay_)
+    return HWC2::Error::None;
+
+  const std::vector<int> vrr_mode = connector_->vrr_modes();
+  if(config < vrr_mode.size()){
+    int refresh_rate = vrr_mode[config];
+    int ret = drm_->UpdateVrrRefreshRate(handle_, refresh_rate);
+    if(ret){
+      HWC2_ALOGE("display=%" PRIu64 " config=%d refresh_rate=%d UpdateVrrRefreshRate fail!",
+                  handle_, config, refresh_rate);
+      return HWC2::Error::BadConfig;
+    }
+  }
+
+  return HWC2::Error::BadConfig;
 }
 
 HWC2::Error DrmHwcTwo::HwcDisplay::SetClientTarget(buffer_handle_t target,

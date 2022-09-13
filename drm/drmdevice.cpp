@@ -1273,6 +1273,54 @@ int DrmDevice::UpdateDisplayMode(int display_id){
   return 0;
 }
 
+// Update VRR refresh rate
+int DrmDevice::UpdateVrrRefreshRate(int display_id, int refresh_rate){
+  std::lock_guard<std::mutex> lock(mtx_);
+  DrmConnector *conn = GetConnectorForDisplay(display_id);
+  // 1. 检查 Connector 状态
+  int ret = CheckConnectorState(display_id, conn);
+  if(ret){
+    return ret;
+  }
+
+  DrmCrtc *crtc = conn->encoder()->crtc();
+  if(crtc != NULL && crtc->variable_refresh_rate().id() > 0){
+
+    drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
+    if (!pset) {
+      HWC2_ALOGE("%s:line=%d Failed to allocate property set",__FUNCTION__, __LINE__);
+      return -ENOMEM;
+    }
+
+    uint64_t min_refresh_rate = 0;
+    uint64_t max_refresh_rate = 0;
+    std::tie(ret, min_refresh_rate) = crtc->min_refresh_rate().value();
+    std::tie(ret, max_refresh_rate) = crtc->max_refresh_rate().value();
+    if(refresh_rate < min_refresh_rate) refresh_rate = min_refresh_rate;
+    if(refresh_rate > max_refresh_rate) refresh_rate = max_refresh_rate;
+    ret = drmModeAtomicAddProperty(pset, crtc->id(),
+                                  crtc->variable_refresh_rate().id(), refresh_rate) < 0;
+    if (ret) {
+      ALOGE("Failed to add variable_refresh_rate property %d to crtc %d",
+            crtc->variable_refresh_rate().id(), crtc->id());
+      drmModeAtomicFree(pset);
+      return -EINVAL;
+    }
+    // AtomicCommit
+    uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+    ret = drmModeAtomicCommit(fd_.get(), pset, flags, this);
+    if (ret < 0) {
+      ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
+      drmModeAtomicFree(pset);
+      return ret;
+    }
+    drmModeAtomicFree(pset);
+    HWC2_ALOGI("display-id=%d Update Refresh Rate = %d success!.", display_id, refresh_rate);
+  }
+
+  return 0;
+}
+
 // 检查 Connector 状态
 int DrmDevice::CheckConnectorState(int display_id, DrmConnector *conn){
   if (!conn) {
@@ -1935,6 +1983,8 @@ int DrmDevice::ReleaseDpyResByNormal(int display_id,
   property_set(property_conn_name, conn_name);
   return 0;
 }
+
+
 
 int DrmDevice::timeline(void) {
   return hotplug_timeline;

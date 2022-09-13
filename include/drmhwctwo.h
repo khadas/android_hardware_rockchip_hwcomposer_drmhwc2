@@ -602,6 +602,8 @@ class DrmHwcTwo : public hwc2_device_t {
     HWC2::Error PresentVirtualDisplay(int32_t *retire_fence);
     HWC2::Error PresentDisplay(int32_t *retire_fence);
     HWC2::Error SetActiveConfig(hwc2_config_t config);
+    // RK:VRR
+    HWC2::Error UpdateRefreshRate(hwc2_config_t config);
     HWC2::Error ChosePreferredConfig();
     HWC2::Error SetClientTarget(buffer_handle_t target, int32_t acquire_fence,
                                 int32_t dataspace, hwc_region_t damage);
@@ -698,6 +700,7 @@ class DrmHwcTwo : public hwc2_device_t {
     DeferredRetireFence d_retire_fence_;
     bool bDropFrame_;
     bool bLastSvepState_;
+    bool bVrrDisplay_;
   };
 
   class DrmHotplugHandler : public DrmEventHandler {

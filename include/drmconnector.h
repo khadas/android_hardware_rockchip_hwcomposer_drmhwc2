@@ -72,6 +72,7 @@ class DrmConnector {
 
   int GetFramebufferInfo(int display_id, uint32_t *w, uint32_t *h, uint32_t *fps);
   int UpdateModes();
+  int UpdateVrrModes();
   int UpdateDisplayMode(int display_id, int update_base_timeline);
   int UpdateBCSH(int display_id, int update_base_timeline);
   int UpdateOutputFormat(int display_id, int update_base_timeline);
@@ -156,6 +157,11 @@ class DrmConnector {
   void addMirrorDisplay(DrmCrtc* crtc, int display);
   std::vector<int>* getMirrorDisplayVectorForCrtc(DrmCrtc* crtc);
 
+  // VRR
+  const std::vector<int> &vrr_modes() const {
+    return vrr_modes_;
+  }
+
  private:
   DrmDevice *drm_;
 
@@ -179,6 +185,7 @@ class DrmConnector {
   DrmMode best_mode_;
   std::vector<DrmMode> modes_;
   std::vector<DrmMode> raw_modes_;
+  std::vector<int> vrr_modes_;
   std::vector<DrmHdr> drmHdr_;
 
   DrmProperty dpms_property_;
