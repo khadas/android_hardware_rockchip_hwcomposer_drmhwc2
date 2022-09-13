@@ -152,7 +152,7 @@ int Vop3588::InitSvep(){
   return 0;
 }
 
-bool Vop3588::SvepAllowedBySvepEnv(DrmHwcLayer* layer){
+bool Vop3588::SvepAllowedByBlacklist(DrmHwcLayer* layer){
   if(mSvepEnv_.mValid){
     // 此黑名单内的应用名不参与 SVEP 处理
     for(auto &black_key : mSvepEnv_.mSvepBlacklist_){
@@ -161,15 +161,23 @@ bool Vop3588::SvepAllowedBySvepEnv(DrmHwcLayer* layer){
         return false;
       }
     }
+  }
+  return true;
+}
 
+bool Vop3588::SvepAllowedByWhitelist(DrmHwcLayer* layer){
+  if(mSvepEnv_.mValid){
+    // 此白名单内的应用名直接参与 SVEP 处理
     for(auto &white_key : mSvepEnv_.mSvepWhitelist_){
-      if(layer->sLayerName_.find(white_key)){
+      if(layer->sLayerName_.find(white_key) != std::string::npos){
+        HWC2_ALOGD_IF_DEBUG("Svep %s in Whitelist! force to SVEP.", layer->sLayerName_.c_str());
         return true;
       }
     }
   }
-  return true;
+  return false;
 }
+
 
 bool Vop3588::SvepAllowedByLocalPolicy(DrmHwcLayer* layer){
   // 视频大于4K则不使用 SVEP.
@@ -1862,8 +1870,9 @@ int Vop3588::TrySvepPolicy(
   static int last_contrast_offset = 0;
 
   for(auto &drmLayer : layers){
-    if(SvepAllowedByLocalPolicy(drmLayer) &&
-       SvepAllowedBySvepEnv(drmLayer)){
+    if(SvepAllowedByWhitelist(drmLayer) || (
+       SvepAllowedByLocalPolicy(drmLayer) &&
+       SvepAllowedByBlacklist(drmLayer))){
         ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
         // 部分参数变化后需要强制更新
         if(last_svep_mode != svep_mode ||
