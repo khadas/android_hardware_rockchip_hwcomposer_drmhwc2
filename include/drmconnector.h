@@ -67,6 +67,7 @@ class DrmConnector {
 
   bool internal() const;
   bool external() const;
+  bool hotplug() const;
   bool writeback() const;
   bool valid_type() const;
 

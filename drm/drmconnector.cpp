@@ -273,6 +273,13 @@ bool DrmConnector::external() const {
   }
 }
 
+bool DrmConnector::hotplug() const{
+  return type_ == DRM_MODE_CONNECTOR_HDMIA ||
+          type_ == DRM_MODE_CONNECTOR_DisplayPort ||
+          type_ == DRM_MODE_CONNECTOR_DVID || type_ == DRM_MODE_CONNECTOR_DVII ||
+          type_ == DRM_MODE_CONNECTOR_VGA;
+}
+
 bool DrmConnector::writeback() const {
 #ifdef DRM_MODE_CONNECTOR_WRITEBACK
   return type_ == DRM_MODE_CONNECTOR_WRITEBACK;
