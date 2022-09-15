@@ -175,9 +175,9 @@ int Hwc356x::TryAssignPlane(DrmDevice* drm){
   }
 
   if(exist_plane_mask){
-    assignPlaneByPlaneMask(drm);
+    ret = assignPlaneByPlaneMask(drm);
   }else{
-    assignPlaneByHWC(drm);
+    ret = assignPlaneByHWC(drm);
   }
 
   return ret;
