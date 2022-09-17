@@ -28,13 +28,18 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-#include <im2d.hpp>
+#include <rga.h>
+
 //XML prase
 #include <tinyxml2.h>
 
 namespace android {
 
 #define ALIGN_DOWN( value, base)	(value & (~(base-1)) )
+
+#ifndef RK_GRALLOC_USAGE_WITHIN_4G
+#define RK_GRALLOC_USAGE_WITHIN_4G (1ULL << 56)
+#endif
 
 ResourceManager::ResourceManager() :
   num_displays_(0) {
@@ -322,10 +327,6 @@ int ResourceManager::DisableWriteBackMode(int display){
 
   bEnableWriteBack_--;
   if(bEnableWriteBack_ <= 0){
-    mNextWriteBackBuffer_ = NULL;
-    mDrawingWriteBackBuffer_ = NULL;
-    mFinishWriteBackBuffer_ = NULL;
-    mWriteBackBQ_ = NULL;
     iWriteBackDisplayId_ = -1;
   }
   return 0;
@@ -337,7 +338,8 @@ std::shared_ptr<DrmBuffer> ResourceManager::GetResetWBBuffer(){
     mResetBackBuffer_ =  std::make_shared<DrmBuffer>(640,
                                                      360,
                                                      HAL_PIXEL_FORMAT_YCrCb_NV12,
-                                                     RK_GRALLOC_USAGE_STRIDE_ALIGN_16,
+                                                     RK_GRALLOC_USAGE_STRIDE_ALIGN_16 |
+                                                     RK_GRALLOC_USAGE_WITHIN_4G,
                                                      "WBResetBuffer");
     if(mResetBackBuffer_->Init()){
       HWC2_ALOGE("DrmBuffer Init fail, w=%d h=%d format=%d name=%s",
@@ -391,12 +393,83 @@ std::shared_ptr<DrmBuffer> ResourceManager::GetNextWBBuffer(){
 
 std::shared_ptr<DrmBuffer> ResourceManager::GetDrawingWBBuffer(){
   std::lock_guard<std::mutex> lock(mtx_);
-  return mDrawingWriteBackBuffer_;
+  return mDrawingWriteBackBuffer_;;
 }
 
 std::shared_ptr<DrmBuffer> ResourceManager::GetFinishWBBuffer(){
   std::lock_guard<std::mutex> lock(mtx_);
-  return mFinishWriteBackBuffer_;
+  return mFinishWriteBackBuffer_;;
+}
+
+int ResourceManager::OutputWBBuffer(rga_buffer_t &dst,
+                                    im_rect &dst_rect){
+  std::lock_guard<std::mutex> lock(mtx_);
+
+  if(mFinishWriteBackBuffer_ == NULL){
+    HWC2_ALOGE("mFinishWriteBackBuffer_ is NULL");
+    return -1;
+  }
+
+  mFinishWriteBackBuffer_->WaitFinishFence();
+  // 添加调试接口，抓打印WriteBack Buffer
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.wb.dump", value, "0");
+  if(atoi(value) > 0){
+    mFinishWriteBackBuffer_->DumpData();
+  }
+
+  rga_buffer_t src;
+  rga_buffer_t pat;
+  im_rect src_rect;
+  im_rect pat_rect;
+
+  // Set src buffer info
+  src.fd      = mFinishWriteBackBuffer_->GetFd();
+  src.width   = mFinishWriteBackBuffer_->GetWidth();
+  src.height  = mFinishWriteBackBuffer_->GetHeight();
+  src.wstride = mFinishWriteBackBuffer_->GetStride();
+  src.hstride = mFinishWriteBackBuffer_->GetHeight();
+  src.format  = mFinishWriteBackBuffer_->GetFormat();
+
+  // 由于WriteBack仅支持BGR888(B:G:R little endian)，股需要使用RGA做格式转换
+  if(src.format == HAL_PIXEL_FORMAT_RGB_888)
+    src.format = RK_FORMAT_BGR_888;
+  // 由于WriteBack仅支持BGR565(B:G:R little endian)，股需要使用RGA做格式转换
+  if(src.format == HAL_PIXEL_FORMAT_RGB_565)
+    src.format = RK_FORMAT_BGR_565;
+
+
+  // Set src rect info
+  src_rect.x = 0;
+  src_rect.y = 0;
+  src_rect.width  = mFinishWriteBackBuffer_->GetWidth();
+  src_rect.height = mFinishWriteBackBuffer_->GetHeight();
+
+  // Set Dataspace
+  // if((srcBuffer.mBufferInfo_.uDataSpace_ & HAL_DATASPACE_STANDARD_BT709) == HAL_DATASPACE_STANDARD_BT709){
+  //   dst.color_space_mode = IM_YUV_TO_RGB_BT709_LIMIT;
+  //   SVEP_ALOGD_IF("color_space_mode = BT709 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
+  // }else{
+  //   SVEP_ALOGD_IF("color_space_mode = BT601 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
+  // }
+
+  IM_STATUS im_state;
+
+  im_opt_t imOpt;
+  memset(&imOpt, 0x00, sizeof(im_opt_t));
+  imOpt.core = IM_SCHEDULER_RGA3_CORE0 | IM_SCHEDULER_RGA3_CORE1;
+
+  // Call Im2d 格式转换
+  im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, NULL, &imOpt, 0);
+
+  if(im_state == IM_STATUS_SUCCESS){
+    HWC2_ALOGD_IF_VERBOSE("call im2d convert to rgb888 Success");
+  }else{
+    HWC2_ALOGD_IF_DEBUG("call im2d fail, ret=%d Error=%s", im_state, imStrError(im_state));
+    return -1;
+  }
+
+  return 0;
 }
 
 int ResourceManager::SwapWBBuffer(){

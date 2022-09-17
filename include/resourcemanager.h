@@ -26,6 +26,8 @@
 
 #include "drmbufferqueue.h"
 
+#include <im2d.hpp>
+
 #include <string.h>
 #include <set>
 #include <map>
@@ -79,6 +81,7 @@ class ResourceManager {
   std::shared_ptr<DrmBuffer> GetNextWBBuffer();
   std::shared_ptr<DrmBuffer> GetDrawingWBBuffer();
   std::shared_ptr<DrmBuffer> GetFinishWBBuffer();
+  int OutputWBBuffer(rga_buffer_t &dst, im_rect &src_rect);
   int SwapWBBuffer();
   // WriteBack interface.
 

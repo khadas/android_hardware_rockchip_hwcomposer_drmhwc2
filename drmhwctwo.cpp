@@ -1533,8 +1533,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,handle_);
 
   if(resource_manager_->isWBMode()){
-    std::shared_ptr<DrmBuffer> wbBuffer = resource_manager_->GetFinishWBBuffer();
-    if(wbBuffer != NULL){
+    if(resource_manager_->GetFinishWBBuffer() != NULL){
       const std::shared_ptr<HwcLayer::bufferInfo_t>
         bufferinfo = output_layer_.GetBufferInfo();
 
@@ -1628,8 +1627,12 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
 
         IM_STATUS im_state;
 
+        im_opt_t imOpt;
+        memset(&imOpt, 0x00, sizeof(im_opt_t));
+        imOpt.core = IM_SCHEDULER_RGA3_CORE0 | IM_SCHEDULER_RGA3_CORE1;
+
         // Call Im2d 格式转换
-        im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0);
+        im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, NULL, &imOpt, 0);
 
         if(im_state == IM_STATUS_SUCCESS){
           HWC2_ALOGD_IF_DEBUG("call im2d reset Success");
@@ -1639,44 +1642,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         }
       }
 
-
-      wbBuffer->WaitFinishFence();
-      // 添加调试接口，抓打印WriteBack Buffer
-      char value[PROPERTY_VALUE_MAX];
-      property_get("debug.wb.dump", value, "0");
-      if(atoi(value) > 0){
-        wbBuffer->DumpData();
-      }
-
-      rga_buffer_t src;
       rga_buffer_t dst;
-      rga_buffer_t pat;
-      im_rect src_rect;
       im_rect dst_rect;
-      im_rect pat_rect;
-
-      // Set src buffer info
-      src.fd      = wbBuffer->GetFd();
-      src.width   = wbBuffer->GetWidth();
-      src.height  = wbBuffer->GetHeight();
-      src.wstride = wbBuffer->GetStride();
-      src.hstride = wbBuffer->GetHeight();
-      src.format  = wbBuffer->GetFormat();
-
-      // 由于WriteBack仅支持BGR888(B:G:R little endian)，股需要使用RGA做格式转换
-      if(src.format == HAL_PIXEL_FORMAT_RGB_888)
-        src.format = RK_FORMAT_BGR_888;
-      // 由于WriteBack仅支持BGR565(B:G:R little endian)，股需要使用RGA做格式转换
-      if(src.format == HAL_PIXEL_FORMAT_RGB_565)
-        src.format = RK_FORMAT_BGR_565;
-
-
-      // Set src rect info
-      src_rect.x = 0;
-      src_rect.y = 0;
-      src_rect.width  = wbBuffer->GetWidth();
-      src_rect.height = wbBuffer->GetHeight();
-
       // Set dst buffer info
       dst.fd      = bufferinfo->iFd_;
       dst.width   = bufferinfo->iWidth_;
@@ -1725,9 +1692,9 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
       // 为了确保录屏数据宽高比一致，故需要对目标的区域做修正
       DrmMode wbMode = resource_manager_->GetWBMode();
       if(wbMode.width()  != bufferinfo->iWidth_ ||
-         wbMode.height() != bufferinfo->iHeight_){
+          wbMode.height() != bufferinfo->iHeight_){
         if((wbMode.width() * 1.0 / bufferinfo->iWidth_) >
-           (wbMode.height() * 1.0 /  bufferinfo->iHeight_)){
+            (wbMode.height() * 1.0 /  bufferinfo->iHeight_)){
           dst_rect.width = bufferinfo->iWidth_;
           dst_rect.height = (int)(bufferinfo->iWidth_ * wbMode.height() / (wbMode.width() * 1.0));
           dst_rect.x = 0;
@@ -1745,31 +1712,18 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         dst_rect.height = bufferinfo->iHeight_;
       }
 
-        dst_rect.x = ALIGN_DOWN( dst_rect.x, 2);
-        dst_rect.y = ALIGN_DOWN( dst_rect.y, 2);
-        dst_rect.width  = ALIGN_DOWN( dst_rect.width, 2);
-        dst_rect.height = ALIGN_DOWN( dst_rect.height, 2);
+      dst_rect.x = ALIGN_DOWN( dst_rect.x, 2);
+      dst_rect.y = ALIGN_DOWN( dst_rect.y, 2);
+      dst_rect.width  = ALIGN_DOWN( dst_rect.width, 2);
+      dst_rect.height = ALIGN_DOWN( dst_rect.height, 2);
 
-      // Set Dataspace
-      // if((srcBuffer.mBufferInfo_.uDataSpace_ & HAL_DATASPACE_STANDARD_BT709) == HAL_DATASPACE_STANDARD_BT709){
-      //   dst.color_space_mode = IM_YUV_TO_RGB_BT709_LIMIT;
-      //   SVEP_ALOGD_IF("color_space_mode = BT709 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
-      // }else{
-      //   SVEP_ALOGD_IF("color_space_mode = BT601 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
-      // }
-
-      IM_STATUS im_state;
-
-      // Call Im2d 格式转换
-      im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0);
-
-      if(im_state == IM_STATUS_SUCCESS){
-        HWC2_ALOGD_IF_VERBOSE("call im2d convert to rgb888 Success");
-      }else{
-        HWC2_ALOGD_IF_DEBUG("call im2d fail, ret=%d Error=%s", im_state, imStrError(im_state));
+      int ret = resource_manager_->OutputWBBuffer(dst, dst_rect);
+      if(ret){
+        HWC2_ALOGE("OutputWBBuffer fail!");
       }
-
       // 添加调试接口，抓打印传递给SurfaceFlinger的Buffer
+      char value[PROPERTY_VALUE_MAX];
+      property_get("debug.wb.dump", value, "0");
       if(atoi(value) > 0){
         output_layer_.DumpData();
       }
