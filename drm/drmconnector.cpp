@@ -406,8 +406,14 @@ int DrmConnector::UpdateVrrModes(){
   std::tie(ret, min_refresh_rate) = crtc->min_refresh_rate().value();
   std::tie(ret, max_refresh_rate) = crtc->max_refresh_rate().value();
 
-  for(int fps = max_refresh_rate ; fps >= min_refresh_rate ; fps -= 10){
+  if(min_refresh_rate == 0 || max_refresh_rate == 0){
+    return 0;
+  }
+
+  for(uint64_t fps = max_refresh_rate ; fps >= min_refresh_rate; fps -= 10){
     vrr_modes_.push_back(fps);
+    if(fps < 10)
+      break;
   }
 
   return 0;
