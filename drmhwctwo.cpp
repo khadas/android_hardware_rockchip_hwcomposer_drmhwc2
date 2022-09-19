@@ -2069,6 +2069,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::SetPowerMode(int32_t mode_in) {
         HWC2_ALOGE("Failed to UpdateModes for display=%" PRIu64 " ret=%d\n", handle_, ret);
       }
     }
+    HoplugEventTmeline();
     ret = UpdateDisplayMode();
     if (ret) {
       HWC2_ALOGE("Failed to UpdateDisplayMode for display=%" PRIu64 " ret=%d\n", handle_, ret);
