@@ -27,6 +27,7 @@
 #include <xf86drmMode.h>
 #include <vector>
 #include <map>
+#include <mutex>
 namespace android {
 
 #define DRM_CONNECTOR_SPILT_MODE_MASK 0xf0
@@ -253,6 +254,8 @@ class DrmConnector {
 
   // Connector mirror
   std::map<DrmCrtc*, std::vector<int>> mMapCrtcDisplays_;
+
+  mutable std::recursive_mutex mRecursiveMutex;
 };
 }  // namespace android
 

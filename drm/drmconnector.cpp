@@ -293,6 +293,8 @@ bool DrmConnector::valid_type() const {
 }
 
 int DrmConnector::UpdateModes() {
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
+
   int fd = drm_->fd();
 
   drmModeConnectorPtr c = drmModeGetConnector(fd, id_);
@@ -421,6 +423,7 @@ int DrmConnector::UpdateVrrModes(){
 }
 
 int DrmConnector::UpdateDisplayMode(int display_id, int update_base_timeline){
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   char resolution_value[PROPERTY_VALUE_MAX]={0};
   char resolution_property[PROPERTY_VALUE_MAX]={0};
   uint32_t width, height, flags, clock;
@@ -619,6 +622,7 @@ int DrmConnector::UpdateOverscan(int display_id, char *overscan_value){
 }
 
 int DrmConnector::UpdateBCSH(int display_id, int update_base_timeline){
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   uint32_t brightness=50, contrast=50, saturation=50, hue=50;
   int ret = 0;
   bool exist_suitable_property=false;
@@ -736,6 +740,7 @@ bool DrmConnector::ParseHdmiOutputFormat(char* strprop, int *format, int *depth)
 }
 
 int DrmConnector::UpdateOutputFormat(int display_id, int update_base_timeline){
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   if(!(color_format_property().id() > 0 || color_depth_property().id() > 0)){
     return 0;
   }
@@ -977,6 +982,7 @@ bool DrmConnector::is_hdmi_support_hdr() const
 }
 
 int DrmConnector::switch_hdmi_hdr_mode(android_dataspace_t input_colorspace){
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   ALOGD_IF(LogLevel(DBG_DEBUG),"%s:line=%d, connector-id=%d, isSupportSt2084 = %d, isSupportHLG = %d , colorspace = %x",
             __FUNCTION__,__LINE__,id(),isSupportSt2084(),isSupportHLG(),input_colorspace);
   struct hdr_output_metadata hdr_metadata;
@@ -1150,6 +1156,7 @@ int DrmConnector::getCropInfo(int32_t *srcX, int32_t *srcY, int32_t *srcW, int32
 }
 
 void DrmConnector::addMirrorDisplay(DrmCrtc* crtc, int display){
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   if(mMapCrtcDisplays_.count(crtc)){
     auto search = mMapCrtcDisplays_.find(crtc);
     if(search != mMapCrtcDisplays_.end()){
@@ -1160,6 +1167,7 @@ void DrmConnector::addMirrorDisplay(DrmCrtc* crtc, int display){
   }
 }
 std::vector<int>* DrmConnector::getMirrorDisplayVectorForCrtc(DrmCrtc* crtc){
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   if(mMapCrtcDisplays_.count(crtc)){
     auto search = mMapCrtcDisplays_.find(crtc);
     if(search != mMapCrtcDisplays_.end()){
