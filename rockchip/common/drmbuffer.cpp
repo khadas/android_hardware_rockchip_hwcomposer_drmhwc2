@@ -109,6 +109,7 @@ int DrmBuffer::Init(){
   iWidth_  = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_WIDTH);
   iHeight_ = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_HEIGHT);
   iStride_ = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_STRIDE);
+  iHeightStride_ = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_HEIGHT_STRIDE);
   iByteStride_ = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_BYTE_STRIDE_WORKROUND);
   iSize_   = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_SIZE);
   iFormat_ = ptrDrmGralloc_->hwc_get_handle_attibute(buffer_,ATT_FORMAT);
@@ -153,6 +154,9 @@ int DrmBuffer::GetWidth(){
 }
 int DrmBuffer::GetHeight(){
   return iHeight_;
+}
+int DrmBuffer::GetHeightStride(){
+  return iHeightStride_;
 }
 int DrmBuffer::GetFormat(){
   return iFormat_;

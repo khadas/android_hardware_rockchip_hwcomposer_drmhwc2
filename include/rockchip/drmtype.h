@@ -206,7 +206,8 @@ typedef enum attribute_flag {
     ATT_FORMAT,
     ATT_SIZE,
     ATT_BYTE_STRIDE,
-    ATT_BYTE_STRIDE_WORKROUND
+    ATT_BYTE_STRIDE_WORKROUND,
+    ATT_HEIGHT_STRIDE,
 }attribute_flag_t;
 
 typedef struct hwc2_drm_display {

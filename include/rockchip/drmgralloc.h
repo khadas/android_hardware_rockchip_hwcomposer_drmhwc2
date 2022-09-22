@@ -99,6 +99,7 @@ public:
   int hwc_get_handle_height(buffer_handle_t hnd);
   int hwc_get_handle_format(buffer_handle_t hnd);
   int hwc_get_handle_stride(buffer_handle_t hnd);
+  int hwc_get_handle_height_stride(buffer_handle_t hnd);
   int hwc_get_handle_byte_stride(buffer_handle_t hnd);
   int hwc_get_handle_byte_stride_workround(buffer_handle_t hnd);
   uint64_t hwc_get_handle_usage(buffer_handle_t hnd);

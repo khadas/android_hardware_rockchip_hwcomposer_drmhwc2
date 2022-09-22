@@ -1427,7 +1427,7 @@ int Vop3588::TryRgaOverlayPolicy(
           src.fd      = drmLayer->iFd_;
           src.width   = drmLayer->iWidth_;
           src.height  = drmLayer->iHeight_;
-          src.hstride = drmLayer->iHeight_;
+          src.hstride = drmLayer->iHeightStride_;
           src.format  = drmLayer->iFormat_;
 
           // RGA 的特殊修改，需要通过 wstride
@@ -1462,7 +1462,7 @@ int Vop3588::TryRgaOverlayPolicy(
           else
             dst.wstride = dst_buffer->GetStride();
 
-          dst.hstride = dst_buffer->GetHeight();
+          dst.hstride = dst_buffer->GetHeightStride();
           dst.format  = dst_buffer->GetFormat();
 
           // AFBC format
@@ -1537,6 +1537,7 @@ int Vop3588::TryRgaOverlayPolicy(
                                                     dst_buffer->GetWidth(),
                                                     dst_buffer->GetHeight(),
                                                     dst_buffer->GetStride(),
+                                                    dst_buffer->GetHeightStride(),
                                                     dst_buffer->GetByteStride(),
                                                     dst_buffer->GetSize(),
                                                     dst_buffer->GetUsage(),
@@ -1571,6 +1572,7 @@ int Vop3588::TryRgaOverlayPolicy(
                                                     dst_buffer->GetWidth(),
                                                     dst_buffer->GetHeight(),
                                                     dst_buffer->GetStride(),
+                                                    dst_buffer->GetHeightStride(),
                                                     dst_buffer->GetByteStride(),
                                                     dst_buffer->GetSize(),
                                                     dst_buffer->GetUsage(),
@@ -2001,6 +2003,7 @@ int Vop3588::TrySvepPolicy(
                                                     dst_buffer->GetWidth(),
                                                     dst_buffer->GetHeight(),
                                                     dst_buffer->GetStride(),
+                                                    dst_buffer->GetHeightStride(),
                                                     dst_buffer->GetByteStride(),
                                                     dst_buffer->GetSize(),
                                                     dst_buffer->GetUsage(),
@@ -2037,6 +2040,7 @@ int Vop3588::TrySvepPolicy(
                                                     output_buffer->GetWidth(),
                                                     output_buffer->GetHeight(),
                                                     output_buffer->GetStride(),
+                                                    output_buffer->GetHeightStride(),
                                                     output_buffer->GetByteStride(),
                                                     output_buffer->GetSize(),
                                                     output_buffer->GetUsage(),

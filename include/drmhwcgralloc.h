@@ -24,6 +24,7 @@ typedef struct hwc_drm_bo {
   uint32_t fd;
   uint32_t width;
   uint32_t height;
+  uint32_t height_stride;
   uint32_t format;        /* DRM_FORMAT_* from drm_fourcc.h */
   uint32_t hal_format;    /* HAL_PIXEL_FORMAT_* */
   uint64_t modifier;

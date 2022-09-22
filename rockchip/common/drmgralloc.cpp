@@ -202,6 +202,37 @@ int DrmGralloc::hwc_get_handle_stride(buffer_handle_t hnd)
 #endif
 }
 
+int DrmGralloc::hwc_get_handle_height_stride(buffer_handle_t hnd){
+#if USE_GRALLOC_4
+    uint64_t height_stride;
+
+    int err = gralloc4::get_height_stride(hnd, &height_stride);
+    if (err != android::OK)
+    {
+        ALOGE("Failed to get buffer pixel_stride, err : %d", err);
+        return -1;
+    }
+
+    return (int)height_stride;
+#else   // USE_GRALLOC_4
+    int ret = 0;
+    int op = GRALLOC_MODULE_PERFORM_GET_HADNLE_HEIGHT;
+    int height = -1;
+
+    if(gralloc_ && gralloc_->perform)
+        ret = gralloc_->perform(gralloc_, op, hnd, &height);
+    else
+        ret = -EINVAL;
+
+    if(ret != 0)
+    {
+        ALOGE("%s:cann't get value from gralloc", __FUNCTION__);
+    }
+
+    return height;
+#endif
+}
+
 int DrmGralloc::hwc_get_handle_byte_stride_workround(buffer_handle_t hnd)
 {
 #if USE_GRALLOC_4
@@ -404,7 +435,6 @@ int DrmGralloc::hwc_get_handle_attributes(buffer_handle_t hnd, std::vector<int> 
 
 int DrmGralloc::hwc_get_handle_attibute(buffer_handle_t hnd, attribute_flag_t flag)
 {
-
 #if USE_GRALLOC_4
     switch ( flag )
     {
@@ -416,6 +446,8 @@ int DrmGralloc::hwc_get_handle_attibute(buffer_handle_t hnd, attribute_flag_t fl
             return hwc_get_handle_stride(hnd);
         case ATT_FORMAT:
             return hwc_get_handle_format(hnd);
+        case ATT_HEIGHT_STRIDE:
+            return hwc_get_handle_height_stride(hnd);
         case ATT_SIZE:
             return hwc_get_handle_size(hnd);
         case ATT_BYTE_STRIDE:

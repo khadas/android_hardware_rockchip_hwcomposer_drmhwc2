@@ -40,6 +40,7 @@ public:
   int GetHeight();
   int GetFormat();
   int GetStride();
+  int GetHeightStride();
   int GetByteStride();
   int GetSize();
   uint64_t GetUsage();
@@ -70,6 +71,7 @@ private:
   int iHeight_;
   int iFormat_;
   int iStride_;
+  int iHeightStride_;
   int iByteStride_;
   int iSize_;
   uint64_t iUsage_;

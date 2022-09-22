@@ -89,8 +89,9 @@ class DrmHwcBuffer {
   int ImportBuffer(buffer_handle_t handle, Importer *importer);
 
   int SetBoInfo(uint32_t fd, uint32_t width,
-                uint32_t height, uint32_t format,
-                uint32_t hal_format, uint64_t modifier,
+                uint32_t height, uint32_t height_stride,
+                uint32_t format, uint32_t hal_format,
+                uint64_t modifier,
                 uint64_t usage, uint32_t byte_stride,
                 uint32_t gem_handle);
  private:
@@ -164,6 +165,7 @@ struct DrmLayerInfoStore{
   int iWidth_;
   int iHeight_;
   int iStride_;
+  int iHeightStride_;
   int iByteStride_;
   int iSize_;
   uint64_t iUsage;
@@ -221,6 +223,7 @@ struct DrmHwcLayer {
   int iWidth_;
   int iHeight_;
   int iStride_;
+  int iHeightStride_;
   int iByteStride_;
   int iSize_;
   uint64_t iUsage;
@@ -266,7 +269,7 @@ struct DrmHwcLayer {
   void SetDisplayFrame(hwc_rect_t const &frame, hwc2_drm_display_t *ctx);
   void SetDisplayFrameMirror(hwc_rect_t const &frame);
   void UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
-      int fd, int format, int w, int h, int stride, int size,
+      int fd, int format, int w, int h, int stride, int h_stride, int size,
       int byte_stride, uint64_t usage, uint32_t fourcc, uint64_t modefier,
       std::string name, hwc_frect_t &intput_crop, uint64_t buffer_id,
       uint32_t gemhandle, uint32_t replace_transform);

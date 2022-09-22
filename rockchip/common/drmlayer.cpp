@@ -68,13 +68,15 @@ int DrmHwcBuffer::ImportBuffer(buffer_handle_t handle, Importer *importer) {
 }
 
 int DrmHwcBuffer::SetBoInfo(uint32_t fd, uint32_t width,
-                            uint32_t height, uint32_t format,
-                            uint32_t hal_format, uint64_t modifier,
+                            uint32_t height, uint32_t height_stride,
+                            uint32_t format, uint32_t hal_format,
+                            uint64_t modifier,
                             uint64_t usage, uint32_t byte_stride,
                             uint32_t gem_handle){
   bo_.fd = fd;
   bo_.width = width;
   bo_.height = height;
+  bo_.height_stride = height_stride;
   bo_.usage = usage;
   bo_.hal_format = hal_format;
   bo_.format = format;
@@ -132,7 +134,7 @@ void DrmHwcNativeHandle::Clear() {
 
 int DrmHwcLayer::ImportBuffer(Importer *importer) {
 
-  buffer.SetBoInfo(iFd_, iWidth_, iHeight_, uFourccFormat_,
+  buffer.SetBoInfo(iFd_, iWidth_, iHeight_, iHeightStride_, uFourccFormat_,
                    iFormat_, uModifier_, iUsage, iByteStride_, uGemHandle_);
 
   int ret = buffer.ImportBuffer(sf_handle, importer);
@@ -550,7 +552,7 @@ supported_eotf_type DrmHwcLayer::GetEOTF(android_dataspace_t dataspace){
 }
 
 void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
-      int fd, int format, int w, int h, int stride, int byte_stride,
+      int fd, int format, int w, int h, int stride, int h_stride, int byte_stride,
       int size, uint64_t usage, uint32_t fourcc, uint64_t modefier,
       std::string name, hwc_frect_t &intput_crop, uint64_t buffer_id,
       uint32_t gemhandle, uint32_t replace_transform){
@@ -565,6 +567,7 @@ void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
   storeLayerInfo_.iWidth_      = iWidth_;
   storeLayerInfo_.iHeight_     = iHeight_;
   storeLayerInfo_.iStride_     = iStride_;
+  storeLayerInfo_.iHeightStride_ = iHeightStride_;
   storeLayerInfo_.iByteStride_ = iByteStride_;
   storeLayerInfo_.iSize_       = iSize_;
   storeLayerInfo_.iUsage       = iUsage;
@@ -580,6 +583,7 @@ void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
   iWidth_        = w;
   iHeight_       = h;
   iStride_       = stride;
+  iHeightStride_ = h_stride;
   iByteStride_   = byte_stride;
   iSize_         = size;
   iUsage         = usage;
@@ -599,18 +603,20 @@ void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
   transform = replace_transform;
   Init();
   HWC2_ALOGD_IF_DEBUG(
-        "SvepTransform : LayerId[%u] Fourcc=%c%c%c%c Buf=[%4d,%4d,%4d,%4d]  src=[%5.0f,%5.0f,%5.0f,%5.0f] dis=[%4d,%4d,%4d,%4d] Transform=%-8.8s(0x%x)\n"
-        "                            Fourcc=%c%c%c%c Buf=[%4d,%4d,%4d,%4d]  src=[%5.0f,%5.0f,%5.0f,%5.0f] dis=[%4d,%4d,%4d,%4d] Transform=%-8.8s(0x%x)\n",
+        "SvepTransform : LayerId[%u] Fourcc=%c%c%c%c Buf[w,h,s,hs,size]=[%4d,%4d,%4d,%4d,%4d]  src=[%5.0f,%5.0f,%5.0f,%5.0f] dis=[%4d,%4d,%4d,%4d] Transform=%-8.8s(0x%x)\n"
+        "                            Fourcc=%c%c%c%c Buf[w,h,s,hs,size]=[%4d,%4d,%4d,%4d,%4d]  src=[%5.0f,%5.0f,%5.0f,%5.0f] dis=[%4d,%4d,%4d,%4d] Transform=%-8.8s(0x%x)\n",
              uId_,
              storeLayerInfo_.uFourccFormat_,storeLayerInfo_.uFourccFormat_>>8,
              storeLayerInfo_.uFourccFormat_>>16,storeLayerInfo_.uFourccFormat_>>24,
-             storeLayerInfo_.iWidth_,storeLayerInfo_.iHeight_,storeLayerInfo_.iStride_,storeLayerInfo_.iSize_,
+             storeLayerInfo_.iWidth_,storeLayerInfo_.iHeight_,storeLayerInfo_.iStride_,
+             storeLayerInfo_.iHeightStride_,storeLayerInfo_.iSize_,
              storeLayerInfo_.source_crop.left,storeLayerInfo_.source_crop.top,
              storeLayerInfo_.source_crop.right,storeLayerInfo_.source_crop.bottom,
              storeLayerInfo_.display_frame.left,storeLayerInfo_.display_frame.top,
              storeLayerInfo_.display_frame.right,storeLayerInfo_.display_frame.bottom,
              TransformToString(storeLayerInfo_.transform).c_str(),storeLayerInfo_.transform,
-             uFourccFormat_,uFourccFormat_>>8,uFourccFormat_>>16,uFourccFormat_>>24,iWidth_,iHeight_,iStride_,iSize_,
+             uFourccFormat_,uFourccFormat_>>8,uFourccFormat_>>16,uFourccFormat_>>24,
+             iWidth_,iHeight_,iStride_,iHeightStride_,iSize_,
              source_crop.left,source_crop.top,source_crop.right,source_crop.bottom,
              display_frame.left,display_frame.top,display_frame.right,display_frame.bottom,
              TransformToString(transform).c_str(),transform);

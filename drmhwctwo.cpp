@@ -1553,7 +1553,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         src.width   = resetBuffer->GetWidth();
         src.height  = resetBuffer->GetHeight();
         src.wstride = resetBuffer->GetStride();
-        src.hstride = resetBuffer->GetHeight();
+        src.hstride = resetBuffer->GetHeightStride();
         src.format  = resetBuffer->GetFormat();
 
         // Set src rect info
@@ -1567,7 +1567,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         dst.width   = bufferinfo->iWidth_;
         dst.height  = bufferinfo->iHeight_;
         dst.wstride = bufferinfo->iStride_;
-        dst.hstride = bufferinfo->iHeight_;
+        dst.hstride = bufferinfo->iHeightStride_;
         // 虚拟屏的格式通常为 HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED
         // 由 Gralloc 决定具体格式，对应格式需要查询 uFourccFormat_ 才能确定
         // 实际申请格式，由于RGA不支持Fourcc格式，所以垚做个转换。
@@ -1649,7 +1649,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
       dst.width   = bufferinfo->iWidth_;
       dst.height  = bufferinfo->iHeight_;
       dst.wstride = bufferinfo->iStride_;
-      dst.hstride = bufferinfo->iHeight_;
+      dst.hstride = bufferinfo->iHeightStride_;
       // 虚拟屏的格式通常为 HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED
       // 由 Gralloc 决定具体格式，对应格式需要查询 uFourccFormat_ 才能确定
       // 实际申请格式，由于RGA不支持Fourcc格式，所以垚做个转换。
@@ -2898,6 +2898,7 @@ void DrmHwcTwo::HwcLayer::PopulateDrmLayer(hwc2_layer_t layer_id, DrmHwcLayer *d
       drmHwcLayer->iStride_ = pBufferInfo_->iStride_;
       drmHwcLayer->iFormat_ = pBufferInfo_->iFormat_;
       drmHwcLayer->iUsage   = pBufferInfo_->iUsage_;
+      drmHwcLayer->iHeightStride_   = pBufferInfo_->iHeightStride_;
       drmHwcLayer->iByteStride_     = pBufferInfo_->iByteStride_;
       drmHwcLayer->uFourccFormat_   = pBufferInfo_->uFourccFormat_;
       drmHwcLayer->uModifier_       = pBufferInfo_->uModifier_;
@@ -2909,6 +2910,7 @@ void DrmHwcTwo::HwcLayer::PopulateDrmLayer(hwc2_layer_t layer_id, DrmHwcLayer *d
       drmHwcLayer->iStride_ = -1;
       drmHwcLayer->iFormat_ = -1;
       drmHwcLayer->iUsage   = -1;
+      drmHwcLayer->iHeightStride_ = -1;
       drmHwcLayer->uFourccFormat_   = 0x20202020; //0x20 is space
       drmHwcLayer->uModifier_ = 0;
       drmHwcLayer->uGemHandle_ = 0;
@@ -2931,6 +2933,7 @@ void DrmHwcTwo::HwcLayer::PopulateDrmLayer(hwc2_layer_t layer_id, DrmHwcLayer *d
       drmHwcLayer->iSize_   = pBufferInfo_->iSize_;
       drmHwcLayer->iFormat_ = pBufferInfo_->iFormat_;
       drmHwcLayer->iUsage   = pBufferInfo_->iUsage_;
+      drmHwcLayer->iHeightStride_   = pBufferInfo_->iHeightStride_;
       drmHwcLayer->iByteStride_     = pBufferInfo_->iByteStride_;
       drmHwcLayer->uFourccFormat_   = pBufferInfo_->uFourccFormat_;
       drmHwcLayer->uModifier_       = pBufferInfo_->uModifier_;
@@ -2943,6 +2946,7 @@ void DrmHwcTwo::HwcLayer::PopulateDrmLayer(hwc2_layer_t layer_id, DrmHwcLayer *d
       drmHwcLayer->iSize_   = -1;
       drmHwcLayer->iFormat_ = -1;
       drmHwcLayer->iUsage   = -1;
+      drmHwcLayer->iHeightStride_ = -1;
       drmHwcLayer->uFourccFormat_   = 0x20202020; //0x20 is space
       drmHwcLayer->uModifier_ = 0;
       drmHwcLayer->uGemHandle_ = 0;
@@ -2993,6 +2997,7 @@ void DrmHwcTwo::HwcLayer::PopulateFB(hwc2_layer_t layer_id, DrmHwcLayer *drmHwcL
     drmHwcLayer->iSize_   = pBufferInfo_->iSize_;
     drmHwcLayer->iFormat_ = pBufferInfo_->iFormat_;
     drmHwcLayer->iUsage   = pBufferInfo_->iUsage_;
+    drmHwcLayer->iHeightStride_   = pBufferInfo_->iHeightStride_;
     drmHwcLayer->iByteStride_     = pBufferInfo_->iByteStride_;
     drmHwcLayer->uFourccFormat_   = pBufferInfo_->uFourccFormat_;
     drmHwcLayer->uModifier_       = pBufferInfo_->uModifier_;
@@ -3005,6 +3010,7 @@ void DrmHwcTwo::HwcLayer::PopulateFB(hwc2_layer_t layer_id, DrmHwcLayer *drmHwcL
     drmHwcLayer->iSize_   = -1;
     drmHwcLayer->iFormat_ = -1;
     drmHwcLayer->iUsage   = -1;
+    drmHwcLayer->iHeightStride_ = -1;
     drmHwcLayer->uFourccFormat_   = DRM_FORMAT_ABGR8888; // fb target default DRM_FORMAT_ABGR8888
     drmHwcLayer->uModifier_ = 0;
     drmHwcLayer->uGemHandle_      = 0;

@@ -356,7 +356,7 @@ std::shared_ptr<DrmBuffer> ResourceManager::GetResetWBBuffer(){
     src.width   = mResetBackBuffer_->GetWidth();
     src.height  = mResetBackBuffer_->GetHeight();
     src.wstride = mResetBackBuffer_->GetStride();
-    src.hstride = mResetBackBuffer_->GetHeight();
+    src.hstride = mResetBackBuffer_->GetHeightStride();
     src.format  = mResetBackBuffer_->GetFormat();
 
     // Set src rect info
@@ -428,7 +428,7 @@ int ResourceManager::OutputWBBuffer(rga_buffer_t &dst,
   src.width   = mFinishWriteBackBuffer_->GetWidth();
   src.height  = mFinishWriteBackBuffer_->GetHeight();
   src.wstride = mFinishWriteBackBuffer_->GetStride();
-  src.hstride = mFinishWriteBackBuffer_->GetHeight();
+  src.hstride = mFinishWriteBackBuffer_->GetHeightStride();
   src.format  = mFinishWriteBackBuffer_->GetFormat();
 
   // 由于WriteBack仅支持BGR888(B:G:R little endian)，股需要使用RGA做格式转换
