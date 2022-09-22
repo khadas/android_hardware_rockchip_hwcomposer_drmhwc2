@@ -1605,7 +1605,12 @@ int Vop3588::TryRgaOverlayPolicy(
     if(!ret){ // Match sucess, to call im2d interface
       for(auto &drmLayer : layers){
         if(drmLayer->bUseRga_){
-          IM_STATUS im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, &releaseFence, NULL, usage | IM_ASYNC);
+
+          im_opt_t imOpt;
+          memset(&imOpt, 0x00, sizeof(im_opt_t));
+          imOpt.core = IM_SCHEDULER_RGA3_CORE0 | IM_SCHEDULER_RGA3_CORE1;
+
+          IM_STATUS im_state = improcess(src, dst, pat, src_rect, dst_rect, pat_rect, 0, &releaseFence, &imOpt, usage | IM_ASYNC);
           if(im_state != IM_STATUS_SUCCESS){
             HWC2_ALOGE("call im2d scale fail, %s",imStrError(im_state));
             rgaBufferQueue_->QueueBuffer(dst_buffer);
