@@ -49,6 +49,7 @@ namespace android {
 
 DrmGralloc::DrmGralloc(){
 #if USE_GRALLOC_4
+  gralloc4::init_env_property();
 #else
   int ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
                          (const hw_module_t **)&gralloc_);

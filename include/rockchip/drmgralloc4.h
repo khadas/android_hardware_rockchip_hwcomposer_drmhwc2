@@ -81,6 +81,12 @@ namespace gralloc4 {
  */
 void set_drm_version(int version);
 
+// 初始化 Gralloc4 系统配置,目前提供的配置如下：
+// vendor.hwc.disable_gralloc4_use_vir_height : 1 / 0
+//    1: 关闭使用 vir height, get_height 获取到的是应用申请的实高
+//    0: 开启使用 vir height, get_height 获取到的是应用申请的虚高
+void init_env_property();
+
 /* ---------------------------------------------------------------------------------------------------------
  *  Types and Structures Definition
  * ---------------------------------------------------------------------------------------------------------

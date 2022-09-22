@@ -156,6 +156,14 @@ void set_drm_version(int version){
   DrmVersion = version;
 }
 
+// vendor.hwc.disable_gralloc4_use_vir_height = true
+bool use_vir_height = true;
+void init_env_property(){
+  char value[PROPERTY_VALUE_MAX];
+  property_get("vendor.hwc.disable_gralloc4_use_vir_height", value, "0");
+  use_vir_height = (atoi(value) == 0);
+}
+
 /* ---------------------------------------------------------------------------------------------------------
  * Local Typedefs
  * ---------------------------------------------------------------------------------------------------------
@@ -306,11 +314,31 @@ int get_width(buffer_handle_t handle, uint64_t* width)
 int get_height(buffer_handle_t handle, uint64_t* height)
 {
     auto &mapper = get_service();
+    int err = -1;
+    if(use_vir_height){
+      std::vector<PlaneLayout> layouts;
+      err = get_metadata(mapper, handle, MetadataType_PlaneLayouts, decodePlaneLayouts, &layouts);
+      if (err != android::OK || layouts.size() < 1)
+      {
+          E("Failed to get plane layouts. err : %d", err);
+          return err;
+      }
 
-    int err = get_metadata(mapper, handle, MetadataType_Height, decodeHeight, height);
-    if (err != android::OK)
-    {
-        E("err : %d", err);
+      if ( layouts.size() > 1 )
+      {
+          // W("it's not reasonable to get global pixel_stride of buffer with planes more than 1.");
+      }
+
+      *height = layouts[0].heightInSamples;
+      // HWC2_ALOGI(" height = %" PRIu64" vir_height=%" PRId64  ,*height, layouts[0].heightInSamples);
+    }else{
+      err = get_metadata(mapper, handle, MetadataType_Height, decodeHeight, height);
+      if (err != android::OK)
+      {
+          E("err : %d", err);
+      }
+
+      // HWC2_ALOGI(" height = %" PRIu64  ,*height);
     }
 
     return err;
