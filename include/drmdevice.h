@@ -44,6 +44,12 @@ namespace android {
     } \
   }
 
+
+enum DrmModeChangeUsage{
+  DmcuNone = 0,
+  DmcuReleaseByPowerMode = 1,
+};
+
 class DrmDevice {
  public:
   DrmDevice();
@@ -116,7 +122,7 @@ class DrmDevice {
   int UpdateDisplayMode(int display_id);
   int UpdateVrrRefreshRate(int display_id, int refresh_rate);
   int BindDpyRes(int display_id);
-  int ReleaseDpyRes(int display_id);
+  int ReleaseDpyRes(int display_id, DrmModeChangeUsage usage = DrmModeChangeUsage::DmcuNone);
   void ClearDisplay(void);
   void ClearDisplay(int display);
   void ClearAllDisplay(void);
@@ -178,12 +184,13 @@ class DrmDevice {
                                       DrmConnector* conn,
                                       DrmCrtc *crtc,
                                       drmModeAtomicReqPtr pset);
-int ReleaseDpyResByNormal(int display_id,
-                          DrmConnector* conn,
-                          DrmCrtc* crtc);
-int ReleaseDpyResByMirror(int display_id,
-                          DrmConnector* conn,
-                          DrmCrtc* crtc);
+  int ReleaseDpyResByNormal(int display_id,
+                            DrmConnector* conn,
+                            DrmCrtc* crtc);
+  int ReleaseDpyResByMirror(int display_id,
+                            DrmConnector* conn,
+                            DrmCrtc* crtc,
+                            DrmModeChangeUsage usage);
 
   // 关闭当前 Crtc 与 Connector 资源
   int DisableAllPlaneForCrtc(int display_id, DrmCrtc *crtc,
@@ -217,6 +224,8 @@ int ReleaseDpyResByMirror(int display_id,
   std::map<int, int> displays_;
   std::vector<DrmMode> white_modes_;
   struct DisplayModeXml DmXml_;
+
+  std::map<int, std::vector<DrmConnector*>> mMapMirrorStateStore_;
 
   mutable std::mutex mtx_;
 };

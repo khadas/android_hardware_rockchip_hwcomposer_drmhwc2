@@ -1789,11 +1789,43 @@ int DrmDevice::BindDpyRes(int display_id){
     HWC2_ALOGW("TryAssignPlane fail, ret = %d", ret);
     return ret;
   }
+
+  // 若上次休眠当前 display-id 存在 Mirror Connector
+  // 则恢复上次休眠前状态
+  if(mMapMirrorStateStore_.count(display_id)){
+    auto mirror_connectors = mMapMirrorStateStore_.find(display_id);
+    if(mirror_connectors != mMapMirrorStateStore_.end()){
+      for(auto temp_connector : mirror_connectors->second){
+        if(!temp_connector)
+          continue;
+        // 1. 检查 Connector 状态
+        int ret = CheckConnectorState(temp_connector->display(), temp_connector);
+        if(ret){
+          return ret;
+        }
+
+        // 2. 获取可用的 crtc 资源
+        DrmCrtc *crtc = NULL;
+        ret = FindAvailableCrtc(temp_connector->display(), temp_connector, &crtc);
+        if(ret){
+          return ret;
+        }
+
+        // 3. 绑定 Connector and Crtc 资源并使能
+        ret = BindConnectorAndCrtc(temp_connector->display(), temp_connector, crtc);
+        if(ret){
+          return ret;
+        }
+      }
+    }
+    mMapMirrorStateStore_.erase(mirror_connectors);
+  }
+
   return 0;
 }
 
 // Release DrmConnector and DrmCrtc resource.
-int DrmDevice::ReleaseDpyRes(int display_id){
+int DrmDevice::ReleaseDpyRes(int display_id, DrmModeChangeUsage usage ){
   std::lock_guard<std::mutex> lock(mtx_);
   int ret;
   DrmConnector *conn = GetConnectorForDisplay(display_id);
@@ -1825,7 +1857,7 @@ int DrmDevice::ReleaseDpyRes(int display_id){
         return ret;
       }
     }else{// 若存在Mirror模式
-      ret = ReleaseDpyResByMirror(display_id, conn, crtc);
+      ret = ReleaseDpyResByMirror(display_id, conn, crtc, usage);
       if(ret){
         HWC2_ALOGE("display-id=%d ReleaseDpyResByMirror fail!.\n", display_id);
         return ret;
@@ -1846,7 +1878,8 @@ int DrmDevice::ReleaseDpyRes(int display_id){
 // Release DrmConnector and DrmCrtc resource.
 int DrmDevice::ReleaseDpyResByMirror(int display_id,
                                      DrmConnector* conn,
-                                     DrmCrtc* crtc){
+                                     DrmCrtc* crtc,
+                                     DrmModeChangeUsage usage){
 
   int ret;
   drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
@@ -1906,30 +1939,52 @@ int DrmDevice::ReleaseDpyResByMirror(int display_id,
   snprintf(property_conn_name,50,"vendor.hwc.device.display-%d",display_id);
   property_set(property_conn_name, conn_name);
 
-  // 4. 重新绑定其他 Connector与 Crtc
-  for(auto temp_conn : store_mirror_conn){
-    int temp_display_id = temp_conn->display();
-    // 4.1 检查 Connector 状态
-    int ret = CheckConnectorState(temp_display_id, temp_conn);
-    if(ret){
-      return ret;
+  // 休眠/唤醒等电源操作不进行重新绑定操作
+  // 记录当前状态，表明休眠时是存在Mirror Connector
+  // 下次唤醒时需要重新绑定 Mirror Connector
+  if(usage == DmcuReleaseByPowerMode){
+    // 如果存在与当前屏幕绑定的 Mirror Connector
+    // 则保存当前状态，下次唤醒时恢复 Mirror 状态
+    if(store_mirror_conn.size() > 0){
+      mMapMirrorStateStore_[display_id] = store_mirror_conn;
+      for(auto &temp_conn : store_mirror_conn){
+        if (!temp_conn) {
+          continue;
+        }
+        snprintf(conn_name,50,"%s-%d:%d:mirror-disconnected",
+                 connector_type_str(temp_conn->type()),
+                 temp_conn->type_id(),
+                 crtc->id());
+        snprintf(property_conn_name,50,"vendor.hwc.device.display-%d", temp_conn->display());
+        property_set(property_conn_name, conn_name);
+      }
     }
+  }else{
+    // 4. 重新绑定其他 Connector与 Crtc
+    for(auto temp_conn : store_mirror_conn){
+      int temp_display_id = temp_conn->display();
+      // 4.1 检查 Connector 状态
+      int ret = CheckConnectorState(temp_display_id, temp_conn);
+      if(ret){
+        return ret;
+      }
 
-    // 4.2 获取可用的 crtc 资源
-    DrmCrtc *temp_crtc = NULL;
-    ret = FindAvailableCrtc(temp_display_id, temp_conn, &temp_crtc);
-    if(ret){
-      return ret;
-    }
+      // 4.2 获取可用的 crtc 资源
+      DrmCrtc *temp_crtc = NULL;
+      ret = FindAvailableCrtc(temp_display_id, temp_conn, &temp_crtc);
+      if(ret){
+        return ret;
+      }
 
-    // 4.3 绑定 Connector and Crtc 资源并使能
-    ret = BindConnectorAndCrtc(temp_display_id, temp_conn, temp_crtc);
-    if(ret){
-      return ret;
+      // 4.3 绑定 Connector and Crtc 资源并使能
+      ret = BindConnectorAndCrtc(temp_display_id, temp_conn, temp_crtc);
+      if(ret){
+        return ret;
+      }
+      HWC2_ALOGI("display-id=%d %s-%d Crtc-id=%d exit Mirror Mode Success! Enter Normal Mode.",
+                  temp_display_id, connector_type_str(temp_conn->type()),
+                  temp_conn->type_id(), temp_crtc->id());
     }
-    HWC2_ALOGI("display-id=%d %s-%d Crtc-id=%d exit Mirror Mode Success! Enter Normal Mode.",
-                temp_display_id, connector_type_str(temp_conn->type()),
-                temp_conn->type_id(), temp_crtc->id());
   }
 
   return 0;
