@@ -299,7 +299,7 @@ int DrmGralloc::hwc_get_handle_format(buffer_handle_t hnd)
 #endif
 }
 
-int DrmGralloc::hwc_get_handle_usage(buffer_handle_t hnd)
+uint64_t DrmGralloc::hwc_get_handle_usage(buffer_handle_t hnd)
 {
 #if USE_GRALLOC_4
     uint64_t usage;
@@ -311,11 +311,11 @@ int DrmGralloc::hwc_get_handle_usage(buffer_handle_t hnd)
         return -1;
     }
 
-    return (int)usage;
+    return usage;
 #else   // USE_GRALLOC_4
     int ret = 0;
     int op = GRALLOC_MODULE_PERFORM_GET_USAGE;
-    int usage = -1;
+    uint64_t usage = -1;
 
     if(gralloc_ && gralloc_->perform)
         ret = gralloc_->perform(gralloc_, op, hnd, &usage);
@@ -327,7 +327,7 @@ int DrmGralloc::hwc_get_handle_usage(buffer_handle_t hnd)
         ALOGE("%s:cann't get value from gralloc", __FUNCTION__);
     }
 
-    return usage;
+    return (uint64_t)usage;
 #endif
 }
 

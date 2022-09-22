@@ -166,7 +166,7 @@ int DrmBuffer::GetByteStride(){
 int DrmBuffer::GetSize(){
   return iSize_;
 }
-int DrmBuffer::GetUsage(){
+uint64_t DrmBuffer::GetUsage(){
   return iUsage_;
 }
 int DrmBuffer::SetCrop(int left, int top, int right, int bottom){

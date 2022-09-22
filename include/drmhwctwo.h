@@ -145,7 +145,7 @@ class DrmHwcTwo : public hwc2_device_t {
       int iStride_=0;
       int iSize_=0;
       int iByteStride_=0;
-      int iUsage_=0;
+      uint64_t iUsage_=0;
       uint32_t uFourccFormat_=0;
       uint32_t uGemHandle_=0;
       uint64_t uModifier_=0;

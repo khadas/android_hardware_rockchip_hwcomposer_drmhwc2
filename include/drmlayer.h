@@ -91,7 +91,7 @@ class DrmHwcBuffer {
   int SetBoInfo(uint32_t fd, uint32_t width,
                 uint32_t height, uint32_t format,
                 uint32_t hal_format, uint64_t modifier,
-                uint32_t usage, uint32_t byte_stride,
+                uint64_t usage, uint32_t byte_stride,
                 uint32_t gem_handle);
  private:
   hwc_drm_bo bo_;
@@ -120,7 +120,7 @@ class DrmHwcNativeHandle {
   }
 
   int CopyBufferHandle(buffer_handle_t handle, int width, int height,
-                       int layerCount, int format, int usage, int stride);
+                       int layerCount, int format, uint64_t usage, int stride);
 
   void Clear();
 
@@ -166,7 +166,7 @@ struct DrmLayerInfoStore{
   int iStride_;
   int iByteStride_;
   int iSize_;
-  int iUsage;
+  uint64_t iUsage;
   uint32_t uFourccFormat_;
   uint64_t uModifier_;
   uint64_t uBufferId_;
@@ -176,7 +176,7 @@ struct DrmLayerInfoStore{
 
 struct DrmHwcLayer {
   buffer_handle_t sf_handle = NULL;
-  int gralloc_buffer_usage = 0;
+  uint64_t gralloc_buffer_usage = 0;
   DrmHwcBuffer buffer;
   DrmHwcNativeHandle handle;
   uint32_t transform;
@@ -223,7 +223,7 @@ struct DrmHwcLayer {
   int iStride_;
   int iByteStride_;
   int iSize_;
-  int iUsage;
+  uint64_t iUsage;
   uint32_t uFourccFormat_;
   uint32_t uGemHandle_;
   uint64_t uModifier_;
@@ -267,7 +267,7 @@ struct DrmHwcLayer {
   void SetDisplayFrameMirror(hwc_rect_t const &frame);
   void UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
       int fd, int format, int w, int h, int stride, int size,
-      int byte_stride, int usage, uint32_t fourcc, uint64_t modefier,
+      int byte_stride, uint64_t usage, uint32_t fourcc, uint64_t modefier,
       std::string name, hwc_frect_t &intput_crop, uint64_t buffer_id,
       uint32_t gemhandle, uint32_t replace_transform);
   void ResetInfoFromStore();
@@ -286,7 +286,7 @@ struct DrmHwcLayer {
   bool IsSkipLayer();
   bool IsGlesCompose();
 
-  bool IsHdr(int usage, android_dataspace_t dataspace);
+  bool IsHdr(uint64_t usage, android_dataspace_t dataspace);
   int GetSkipLine();
   v4l2_colorspace GetColorSpace(android_dataspace_t dataspace);
   supported_eotf_type GetEOTF(android_dataspace_t dataspace);

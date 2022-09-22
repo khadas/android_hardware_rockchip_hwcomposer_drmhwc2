@@ -70,7 +70,7 @@ int DrmHwcBuffer::ImportBuffer(buffer_handle_t handle, Importer *importer) {
 int DrmHwcBuffer::SetBoInfo(uint32_t fd, uint32_t width,
                             uint32_t height, uint32_t format,
                             uint32_t hal_format, uint64_t modifier,
-                            uint32_t usage, uint32_t byte_stride,
+                            uint64_t usage, uint32_t byte_stride,
                             uint32_t gem_handle){
   bo_.fd = fd;
   bo_.width = width;
@@ -86,7 +86,7 @@ int DrmHwcBuffer::SetBoInfo(uint32_t fd, uint32_t width,
 
 int DrmHwcNativeHandle::CopyBufferHandle(buffer_handle_t handle, int width,
                                          int height, int layerCount, int format,
-                                         int usage, int stride) {
+                                         uint64_t usage, int stride) {
   native_handle_t *handle_copy;
   GraphicBufferMapper &gm(GraphicBufferMapper::get());
   int ret;
@@ -377,7 +377,7 @@ bool DrmHwcLayer::IsScale(hwc_frect_t &source_crop, hwc_rect_t &display_frame, i
   return (fHScaleMul_ != 1.0 ) || ( fVScaleMul_ != 1.0);
 }
 
-bool DrmHwcLayer::IsHdr(int usage, android_dataspace_t dataspace){
+bool DrmHwcLayer::IsHdr(uint64_t usage, android_dataspace_t dataspace){
   if(((usage & 0x0F000000) == HDR_ST2084_USAGE ||
       (usage & 0x0F000000) == HDR_HLG_USAGE)){
     return true;
@@ -551,7 +551,7 @@ supported_eotf_type DrmHwcLayer::GetEOTF(android_dataspace_t dataspace){
 
 void DrmHwcLayer::UpdateAndStoreInfoFromDrmBuffer(buffer_handle_t handle,
       int fd, int format, int w, int h, int stride, int byte_stride,
-      int size, int usage, uint32_t fourcc, uint64_t modefier,
+      int size, uint64_t usage, uint32_t fourcc, uint64_t modefier,
       std::string name, hwc_frect_t &intput_crop, uint64_t buffer_id,
       uint32_t gemhandle, uint32_t replace_transform){
 

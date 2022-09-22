@@ -42,7 +42,7 @@ public:
   int GetStride();
   int GetByteStride();
   int GetSize();
-  int GetUsage();
+  uint64_t GetUsage();
   int SetCrop(int left, int top, int right, int bottom);
   int GetCrop(int *left, int *top, int *right, int *bottom);
   uint32_t GetFourccFormat();
