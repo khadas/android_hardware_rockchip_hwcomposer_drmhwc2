@@ -46,6 +46,24 @@
 
 #include <cutils/properties.h>
 
+
+// define from hardware/rockchip/libgralloc/bifrost/src/mali_gralloc_usages.h
+#ifndef RK_GRALLOC_USAGE_WITHIN_4G
+#define RK_GRALLOC_USAGE_WITHIN_4G (1ULL << 56)
+#endif
+
+#ifndef RK_GRALLOC_USAGE_STRIDE_ALIGN_16
+#define RK_GRALLOC_USAGE_STRIDE_ALIGN_16 (1ULL << 57)
+#endif
+
+#ifndef RK_GRALLOC_USAGE_STRIDE_ALIGN_64
+#define RK_GRALLOC_USAGE_STRIDE_ALIGN_64 (1ULL << 60)
+#endif
+
+#ifndef MALI_GRALLOC_USAGE_NO_AFBC
+#define MALI_GRALLOC_USAGE_NO_AFBC (1ULL << 29)
+#endif
+
 namespace android {
 class DrmDevice;
 

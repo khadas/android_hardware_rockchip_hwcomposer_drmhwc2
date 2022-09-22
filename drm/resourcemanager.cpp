@@ -37,8 +37,13 @@ namespace android {
 
 #define ALIGN_DOWN( value, base)	(value & (~(base-1)) )
 
+// define from hardware/rockchip/libgralloc/bifrost/src/mali_gralloc_usages.h
 #ifndef RK_GRALLOC_USAGE_WITHIN_4G
 #define RK_GRALLOC_USAGE_WITHIN_4G (1ULL << 56)
+#endif
+
+#ifndef RK_GRALLOC_USAGE_STRIDE_ALIGN_16
+#define RK_GRALLOC_USAGE_STRIDE_ALIGN_16 (1ULL << 57)
 #endif
 
 ResourceManager::ResourceManager() :
