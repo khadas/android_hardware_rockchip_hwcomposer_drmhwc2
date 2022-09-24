@@ -279,6 +279,8 @@ HWC2::Error DrmHwcTwo::RegisterCallback(int32_t descriptor,
       auto hotplug = reinterpret_cast<HWC2_PFN_HOTPLUG>(function);
       hotplug(data, HWC_DISPLAY_PRIMARY,
               static_cast<int32_t>(HWC2::Connection::Connected));
+      // 主屏已经像SurfaceFlinger注册
+      mHasRegisterDisplay_.insert(HWC_DISPLAY_PRIMARY);
       auto &drmDevices = resource_manager_->GetDrmDevices();
       for (auto &device : drmDevices)
         HandleInitialHotplugState(device.get());
@@ -3100,6 +3102,10 @@ int DrmHwcTwo::HwcLayer::DumpData() {
 
 }
 
+bool DrmHwcTwo::IsHasRegisterDisplayId(hwc2_display_t displayid){
+  return mHasRegisterDisplay_.count(displayid) > 0;
+}
+
 void DrmHwcTwo::HandleDisplayHotplug(hwc2_display_t displayid, int state) {
   auto cb = callbacks_.find(HWC2::Callback::Hotplug);
   if (cb == callbacks_.end())
@@ -3126,6 +3132,12 @@ void DrmHwcTwo::HandleDisplayHotplug(hwc2_display_t displayid, int state) {
   hotplug(cb->second.data, displayid,
           (state == DRM_MODE_CONNECTED ? HWC2_CONNECTION_CONNECTED
                                        : HWC2_CONNECTION_DISCONNECTED));
+  // 通过 mHasRegisterDisplay_ 记录已经向 SurfaceFlinger 注册的 display-id
+  if(state == DRM_MODE_CONNECTED)
+    mHasRegisterDisplay_.insert(displayid);
+  else{
+    mHasRegisterDisplay_.erase(displayid);
+  }
 }
 
 void DrmHwcTwo::HandleInitialHotplugState(DrmDevice *drmDevice) {
@@ -3201,7 +3213,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
       ret |= (int32_t)display.HoplugEventTmeline();
       ret |= (int32_t)display.UpdateDisplayMode();
       ret |= (int32_t)display.ChosePreferredConfig();
-      ret |= (int32_t)display.CheckStateAndReinit(true);
+      ret |= (int32_t)display.CheckStateAndReinit(!hwc2_->IsHasRegisterDisplayId(display_id));
       if(ret != 0){
         HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                    cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
@@ -3246,7 +3258,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
         ret |= (int32_t)display.HoplugEventTmeline();
         ret |= (int32_t)display.UpdateDisplayMode();
         ret |= (int32_t)display.ChosePreferredConfig();
-        ret |= (int32_t)display.CheckStateAndReinit(true);
+        ret |= (int32_t)display.CheckStateAndReinit(!hwc2_->IsHasRegisterDisplayId(display_id));
         if(ret != 0){
           HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                     cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",
@@ -3298,7 +3310,7 @@ void DrmHwcTwo::DrmHotplugHandler::HandleEvent(uint64_t timestamp_us) {
           ret |= (int32_t)display.HoplugEventTmeline();
           ret |= (int32_t)display.UpdateDisplayMode();
           ret |= (int32_t)display.ChosePreferredConfig();
-          ret |= (int32_t)display.CheckStateAndReinit(true);
+          ret |= (int32_t)display.CheckStateAndReinit(!hwc2_->IsHasRegisterDisplayId(display_id));
           if(ret != 0){
             HWC2_ALOGE("hwc_hotplug: %s connector %u type=%s type_id=%d state is error, skip hotplug.",
                       cur_state == DRM_MODE_CONNECTED ? "Plug" : "Unplug",

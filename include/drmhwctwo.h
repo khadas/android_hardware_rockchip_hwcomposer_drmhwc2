@@ -783,6 +783,7 @@ class DrmHwcTwo : public hwc2_device_t {
   HWC2::Error CreateDisplay(hwc2_display_t displ, HWC2::DisplayType type);
   void HandleDisplayHotplug(hwc2_display_t displayid, int state);
   void HandleInitialHotplugState(DrmDevice *drmDevice);
+  bool IsHasRegisterDisplayId(hwc2_display_t displayid);
 
   static void StaticScreenOptHandler(int sig){
     if (sig == SIGALRM)
@@ -798,6 +799,8 @@ class DrmHwcTwo : public hwc2_device_t {
   std::map<HWC2::Callback, HwcCallback> callbacks_;
   std::string mDumpString;
   std::atomic<int> mVirtualDisplayCount_;
+  // 通过 mHasRegisterDisplay_ 存储已向SurfaceFlinger注册的display
+  std::set<hwc2_display_t> mHasRegisterDisplay_;
 };
 }  // namespace android
 #endif // DRM_HWC_TWO_H
