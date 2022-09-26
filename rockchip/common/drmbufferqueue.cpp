@@ -78,7 +78,7 @@ std::shared_ptr<DrmBuffer> DrmBufferQueue::DequeueDrmBuffer(int w,
                                                             uint64_t usage,
                                                             std::string name,
                                                             int parent_id){
-  HWC2_ALOGD_IF_DEBUG("w=%d, h=%d, format=%d usage=0x%" PRIu64 " name=%s",w, h, format, usage, name.c_str());
+  HWC2_ALOGD_IF_DEBUG("w=%d, h=%d, format=%d usage=0x%" PRIx64 " name=%s",w, h, format, usage, name.c_str());
   if(bufferQueue_.size() == iMaxBufferSize_){
     currentBuffer_ = bufferQueue_.front();
     bufferQueue_.pop();

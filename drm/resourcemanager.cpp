@@ -46,6 +46,12 @@ namespace android {
 #define RK_GRALLOC_USAGE_STRIDE_ALIGN_16 (1ULL << 57)
 #endif
 
+/* Gralloc 4.0 中, 表征 "调用 alloc() 的 client 要求分配的 buffer 不是 AFBC 格式".
+*/
+#ifndef MALI_GRALLOC_USAGE_NO_AFBC
+#define MALI_GRALLOC_USAGE_NO_AFBC (1ULL << 29)
+#endif
+
 ResourceManager::ResourceManager() :
   num_displays_(0) {
   drmGralloc_ = DrmGralloc::getInstance();
@@ -244,7 +250,8 @@ int ResourceManager::EnableWriteBackMode(int display){
       = mWriteBackBQ_->DequeueDrmBuffer(iWBWidth_,
                                         iWBHeight_,
                                         iWBFormat_,
-                                        RK_GRALLOC_USAGE_STRIDE_ALIGN_16,
+                                        RK_GRALLOC_USAGE_STRIDE_ALIGN_16 |
+                                        MALI_GRALLOC_USAGE_NO_AFBC,
                                         "WriteBackBuffer");
     if(!mNextWriteBackBuffer_->initCheck()){
       HWC2_ALOGE("display=%d WBBuffer Dequeue fail, w=%d h=%d format=%d",
@@ -315,7 +322,8 @@ int ResourceManager::UpdateWriteBackResolution(int display){
     = mWriteBackBQ_->DequeueDrmBuffer(iWBWidth_,
                                       iWBHeight_,
                                       iWBFormat_,
-                                      RK_GRALLOC_USAGE_STRIDE_ALIGN_16,
+                                      RK_GRALLOC_USAGE_STRIDE_ALIGN_16 |
+                                      MALI_GRALLOC_USAGE_NO_AFBC,
                                       "WriteBackBuffer");
   if(!mNextWriteBackBuffer_->initCheck()){
     HWC2_ALOGE("display=%d WBBuffer Dequeue fail, w=%d h=%d format=%d",
@@ -436,10 +444,10 @@ int ResourceManager::OutputWBBuffer(rga_buffer_t &dst,
   src.hstride = mFinishWriteBackBuffer_->GetHeightStride();
   src.format  = mFinishWriteBackBuffer_->GetFormat();
 
-  // 由于WriteBack仅支持BGR888(B:G:R little endian)，股需要使用RGA做格式转换
+  // 由于WriteBack仅支持BGR888(B:G:R little endian)，故需要使用RGA做格式转换
   if(src.format == HAL_PIXEL_FORMAT_RGB_888)
     src.format = RK_FORMAT_BGR_888;
-  // 由于WriteBack仅支持BGR565(B:G:R little endian)，股需要使用RGA做格式转换
+  // 由于WriteBack仅支持BGR565(B:G:R little endian)，故需要使用RGA做格式转换
   if(src.format == HAL_PIXEL_FORMAT_RGB_565)
     src.format = RK_FORMAT_BGR_565;
 
@@ -503,7 +511,8 @@ int ResourceManager::SwapWBBuffer(){
     = mWriteBackBQ_->DequeueDrmBuffer(iWBWidth_,
                                       iWBHeight_,
                                       iWBFormat_,
-                                      RK_GRALLOC_USAGE_STRIDE_ALIGN_16,
+                                      RK_GRALLOC_USAGE_STRIDE_ALIGN_16 |
+                                      MALI_GRALLOC_USAGE_NO_AFBC,
                                       "WriteBackBuffer");
   if(!next->initCheck()){
     HWC2_ALOGE("display=%d WBBuffer Dequeue fail, w=%d h=%d format=%d",
@@ -513,6 +522,12 @@ int ResourceManager::SwapWBBuffer(){
                                       iWBFormat_);
     return -1;
   }
+
+  HWC2_ALOGD_IF_INFO("display=%d success, w=%d h=%d format=%d",
+                                    iWriteBackDisplayId_,
+                                    iWBWidth_,
+                                    iWBHeight_,
+                                    iWBFormat_);
 
   mNextWriteBackBuffer_ = next;
   return 0;

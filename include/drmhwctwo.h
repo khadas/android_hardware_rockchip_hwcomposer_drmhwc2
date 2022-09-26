@@ -327,7 +327,7 @@ class DrmHwcTwo : public hwc2_device_t {
       drmGralloc_->hwc_get_handle_name(buffer_,pBufferInfo_->sLayerName_);
       layer_name_ = pBufferInfo_->sLayerName_;
       HWC2_ALOGD_IF_VERBOSE("bufferInfoMap_ size = %zu insert success! BufferId=%" PRIx64
-                            " fd=%d w=%d h=%d format=%d fourcc=%c%c%c%c Name=%s",
+                            " fd=%d w=%d h=%d format=%d fourcc=%c%c%c%c usage=%" PRIx64 " modifier=%" PRIx64 " Name=%s",
                             bufferInfoMap_.size(),buffer_id,
                             pBufferInfo_->iFd_,
                             pBufferInfo_->iWidth_,
@@ -337,6 +337,8 @@ class DrmHwcTwo : public hwc2_device_t {
                             pBufferInfo_->uFourccFormat_ >> 8,
                             pBufferInfo_->uFourccFormat_ >> 16,
                             pBufferInfo_->uFourccFormat_ >> 24,
+                            pBufferInfo_->iUsage_,
+                            pBufferInfo_->uModifier_,
                             pBufferInfo_->sLayerName_.c_str());
     }
 
@@ -705,6 +707,8 @@ class DrmHwcTwo : public hwc2_device_t {
     bool bDropFrame_;
     bool bLastSvepState_;
     bool bVrrDisplay_;
+
+    bool bUseWriteBack_;
   };
 
   class DrmHotplugHandler : public DrmEventHandler {

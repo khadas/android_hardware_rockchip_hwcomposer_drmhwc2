@@ -173,7 +173,7 @@ HWC2::Error DrmHwcTwo::CreateVirtualDisplay(uint32_t width, uint32_t height,
                                             HWC2::DisplayType::Virtual));
     displays_.at(virtual_display_id).InitVirtual();
     *display = virtual_display_id;
-    *format = HAL_PIXEL_FORMAT_YCRCB_420_SP;
+    *format = HAL_PIXEL_FORMAT_RGBA_8888;
     mVirtualDisplayCount_++;
     resource_manager_->EnableWriteBackMode(write_back_id);
     HWC2_ALOGI("Support VDS: w=%u,h=%u,f=%d display-id=%d",width,height,*format,virtual_display_id);
@@ -456,7 +456,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::InitVirtual() {
   }
 
   init_success_ = true;
-
+  frame_no_ = 0;
   return HWC2::Error::None;
 }
 
@@ -1534,7 +1534,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
 
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64,handle_);
 
-  if(resource_manager_->isWBMode()){
+  if(bUseWriteBack_ && resource_manager_->isWBMode()){
     if(resource_manager_->GetFinishWBBuffer() != NULL){
       const std::shared_ptr<HwcLayer::bufferInfo_t>
         bufferinfo = output_layer_.GetBufferInfo();
@@ -1572,7 +1572,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         dst.hstride = bufferinfo->iHeightStride_;
         // 虚拟屏的格式通常为 HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED
         // 由 Gralloc 决定具体格式，对应格式需要查询 uFourccFormat_ 才能确定
-        // 实际申请格式，由于RGA不支持Fourcc格式，所以垚做个转换。
+        // 实际申请格式，由于RGA不支持Fourcc格式，所以要做个转换。
         switch (bufferinfo->uFourccFormat_) {
           case DRM_FORMAT_BGR888:
             dst.format = HAL_PIXEL_FORMAT_RGB_888;
@@ -1581,7 +1581,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
             dst.format = HAL_PIXEL_FORMAT_BGRA_8888;
             break;
           case DRM_FORMAT_XBGR8888:
-            dst.format = HAL_PIXEL_FORMAT_RGBX_8888;
+            // dst.format = HAL_PIXEL_FORMAT_RGBX_8888;
+            dst.format = HAL_PIXEL_FORMAT_BGRA_8888;
             break;
           case DRM_FORMAT_ABGR8888:
             dst.format = HAL_PIXEL_FORMAT_RGBA_8888;
@@ -1619,13 +1620,9 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         dst_rect.width  = ALIGN_DOWN( dst_rect.width, 2);
         dst_rect.height = ALIGN_DOWN( dst_rect.height, 2);
 
-        // Set Dataspace
-        // if((srcBuffer.mBufferInfo_.uDataSpace_ & HAL_DATASPACE_STANDARD_BT709) == HAL_DATASPACE_STANDARD_BT709){
-        //   dst.color_space_mode = IM_YUV_TO_RGB_BT709_LIMIT;
-        //   SVEP_ALOGD_IF("color_space_mode = BT709 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
-        // }else{
-        //   SVEP_ALOGD_IF("color_space_mode = BT601 dataspace=0x%" PRIx64,srcBuffer.mBufferInfo_.uDataSpace_);
-        // }
+        if(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 == (bufferinfo->uModifier_ & AFBC_FORMAT_MOD_BLOCK_SIZE_16x16)){
+          dst.rd_mode = IM_FBC_MODE;
+        }
 
         IM_STATUS im_state;
 
@@ -1640,7 +1637,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
           HWC2_ALOGD_IF_DEBUG("call im2d reset Success");
           mHasResetBufferId_.insert(bufferinfo->uBufferId_);
         }else{
-          HWC2_ALOGD_IF_DEBUG("call im2d reset fail, ret=%d Error=%s", im_state, imStrError(im_state));
+          HWC2_ALOGE("call im2d reset fail, ret=%d Error=%s", im_state, imStrError(im_state));
         }
       }
 
@@ -1663,7 +1660,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
           dst.format = HAL_PIXEL_FORMAT_BGRA_8888;
           break;
         case DRM_FORMAT_XBGR8888:
-          dst.format = HAL_PIXEL_FORMAT_RGBX_8888;
+            // dst.format = HAL_PIXEL_FORMAT_RGBX_8888;
+            dst.format = HAL_PIXEL_FORMAT_BGRA_8888;
           break;
         case DRM_FORMAT_ABGR8888:
           dst.format = HAL_PIXEL_FORMAT_RGBA_8888;
@@ -1719,14 +1717,18 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
       dst_rect.width  = ALIGN_DOWN( dst_rect.width, 2);
       dst_rect.height = ALIGN_DOWN( dst_rect.height, 2);
 
+      if(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 == (bufferinfo->uModifier_ & AFBC_FORMAT_MOD_BLOCK_SIZE_16x16)){
+        dst.rd_mode = IM_FBC_MODE;
+      }
+
       int ret = resource_manager_->OutputWBBuffer(dst, dst_rect);
       if(ret){
         HWC2_ALOGE("OutputWBBuffer fail!");
       }
-      // 添加调试接口，抓打印传递给SurfaceFlinger的Buffer
+      // 添加调试接口，抓打印传递给SurfaceFlinger的 Buffer
       char value[PROPERTY_VALUE_MAX];
       property_get("debug.wb.dump", value, "0");
-      if(atoi(value) > 0){
+      if(atoi(value) > 0) {
         output_layer_.DumpData();
       }
     }
@@ -1740,8 +1742,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentDisplay(int32_t *retire_fence) {
   ATRACE_CALL();
 
   if(isVirtual()){
-    PresentVirtualDisplay(retire_fence);
-    return HWC2::Error::None;
+    return PresentVirtualDisplay(retire_fence);;
   }
 
   if(!init_success_){
@@ -2106,79 +2107,55 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateVirtualDisplay(uint32_t *num_types,
     if(LogLevel(DBG_INFO)){
       DumpDisplayLayersInfo();
     }
-    // 判断虚拟屏与主屏的Layer图层信息是否完全一致
-    // 完全一致即可使用WriteBack回写主屏屏幕数据作为虚拟屏显示数据
-    bool can_use_writeback = true;
 
-    if(resource_manager_->isWBMode()){
-      std::shared_ptr<DrmBuffer> wbBuffer = resource_manager_->GetFinishWBBuffer();
-      if(wbBuffer == NULL){
-        can_use_writeback = false;
-      }
-    }
-#if 0 // 目前发现部分双屏同显的display也存在图层数目不一致问题，所以无法通过图层判断.
-    // 检查图层数目
-    auto primary_display = resource_manager_->GetHwc2()->displays_.find(0);
-    if(primary_display != resource_manager_->GetHwc2()->displays_.end()){
-      if(primary_display->second.get_layers().size() != layers_.size()){
-        can_use_writeback = false;
-        HWC2_ALOGD_IF_DEBUG("Primary LayerSize(%zu) != Virtual LayerSize(%zu)",
-                            primary_display->second.get_layers().size(),
-                            layers_.size());
-      }else{  // LayerSize 相等，检查所有图层 LayerName 是否一致
-        for ( auto &primary_layers : primary_display->second.get_layers()){
-          DrmHwcTwo::HwcLayer &p_layer = primary_layers.second;
-          bool has_find = false;
-          for ( auto &l : layers_) {
-            DrmHwcTwo::HwcLayer &c_layer = l.second;
-            if(p_layer.GetBufferInfo() != NULL &&
-               c_layer.GetBufferInfo() != NULL &&
-               !strcmp(p_layer.GetBufferInfo()->sLayerName_.c_str(),
-                       c_layer.GetBufferInfo()->sLayerName_.c_str())){
-              has_find = true;
-              break;
-            }
-          }
-          if(!has_find){
-            can_use_writeback = false;
-            break;
-          }
+    bUseWriteBack_ = true;
+
+    char value[PROPERTY_VALUE_MAX];
+    property_get("vendor.hwc.only_sideband_use_wb", value, "0");
+    if(atoi(value) > 0){
+      bUseWriteBack_ = false;
+      bool exist_sideband_stream = false;
+      // 只有存在 SidebandStream 的录屏才会使用 WriteBack;
+      for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
+        DrmHwcTwo::HwcLayer &layer = l.second;
+        if(layer.sf_type() == HWC2::Composition::Sideband){
+          exist_sideband_stream = true;
         }
       }
+
+      if(exist_sideband_stream){
+        bUseWriteBack_ = true;
+      }
     }
-#endif
+
+    if(frame_no_ < 5)
+      bUseWriteBack_ = false;
 
     for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
       DrmHwcTwo::HwcLayer &layer = l.second;
-      if(can_use_writeback){
+      if(bUseWriteBack_ && layer.sf_type() == HWC2::Composition::Device){
         layer.set_validated_type(HWC2::Composition::Device);
-        ALOGD_IF(LogLevel(DBG_INFO),"[%.4" PRIu64 "]=Device : %s",
-                                l.first,
-                                layer.GetBufferInfo()->sLayerName_.c_str());
       }else{
         layer.set_validated_type(HWC2::Composition::Client);
-        ALOGD_IF(LogLevel(DBG_INFO),"[%.4" PRIu64 "]=Client : %s",
-                                l.first,
-                                layer.GetBufferInfo()->sLayerName_.c_str());
       }
       ++*num_types;
     }
     *num_requests = 0;
-    return HWC2::Error::None;
 
+    return HWC2::Error::None;
 }
 HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
                                                    uint32_t *num_requests) {
   ATRACE_CALL();
   HWC2_ALOGD_IF_VERBOSE("display-id=%" PRIu64 ,handle_);
 
-  if(LogLevel(DBG_DEBUG))
-    DumpDisplayLayersInfo();
-
   // 虚拟屏
   if(isVirtual()){
-    return ValidateVirtualDisplay(num_types, num_requests);
+    return ValidateVirtualDisplay(num_types, num_requests);;
   }
+
+  if(LogLevel(DBG_DEBUG))
+    DumpDisplayLayersInfo();
 
   if(!init_success_){
     HWC2_ALOGE("init_success_=%d skip.",init_success_);
