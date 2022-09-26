@@ -1598,6 +1598,25 @@ void DrmDisplayCompositor::ClearDisplay() {
     pthread_cond_signal(&composite_queue_cond_);
   }
   mapDisplayHaveQeueuCnt_.clear();
+
+  if(bWriteBackEnable_){
+    drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
+    if (!pset) {
+      ALOGE("Failed to allocate property set");
+      return;
+    }
+    DrmDevice *drm = resource_manager_->GetDrmDevice(display_);
+    DisableWritebackCommit(pset, drm->GetWritebackConnectorForDisplay(0));
+    uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+    int ret = drmModeAtomicCommit(drm->fd(), pset, flags, drm);
+    if (ret) {
+      ALOGE("Failed to commit pset ret=%d\n", ret);
+      drmModeAtomicFree(pset);
+      pset_=NULL;
+    }
+    bWriteBackEnable_ = false;
+  }
+
   clear_ = true;
   //vsync_worker_.VSyncControl(false);
 }
