@@ -108,6 +108,9 @@ class DrmDisplayCompositor {
   int SetupWritebackCommit(drmModeAtomicReqPtr pset, uint32_t crtc_id,
                            DrmConnector *writeback_conn,
                            DrmHwcBuffer *writeback_buffer);
+  int DisableWritebackCommit(drmModeAtomicReqPtr pset,
+                             DrmConnector *writeback_conn);
+
   int ApplyDpms(DrmDisplayComposition *display_comp);
   int DisablePlanes(DrmDisplayComposition *display_comp);
 
@@ -171,6 +174,9 @@ class DrmDisplayCompositor {
   std::map<int, uint64_t> mapDisplayHaveQeueuCnt_;
 
   int64_t iLastDropFrameNo_;
+
+  bool bWriteBackRequestDisable_;
+  bool bWriteBackEnable_;
 };
 }  // namespace android
 

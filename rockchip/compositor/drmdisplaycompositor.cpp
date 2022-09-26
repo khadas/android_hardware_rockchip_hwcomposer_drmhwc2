@@ -366,6 +366,10 @@ int DrmDisplayCompositor::SetupWritebackCommit(drmModeAtomicReqPtr pset,
                                                DrmHwcBuffer *writeback_buffer) {
 
   int ret = 0;
+
+  if(writeback_conn == NULL){
+    return 0;
+  }
   if (writeback_conn->writeback_fb_id().id() == 0 ||
       writeback_conn->writeback_out_fence().id() == 0) {
     ALOGE("Writeback properties don't exit");
@@ -404,8 +408,55 @@ int DrmDisplayCompositor::SetupWritebackCommit(drmModeAtomicReqPtr pset,
     ALOGE("Failed to  attach writeback");
     return ret;
   }
+
+  bWriteBackEnable_ = true;
+
+  HWC2_ALOGD_IF_DEBUG("WB: id=%" PRIu64 " fbid=%d conn-id=%d crtc_id=%d", wbBuffer->GetId(),
+                                                                 wbBuffer->GetFbId(),
+                                                                 writeback_conn->id(),
+                                                                 crtc_id);
   return 0;
 }
+
+int DrmDisplayCompositor::DisableWritebackCommit(drmModeAtomicReqPtr pset,
+                                                 DrmConnector *writeback_conn) {
+
+  int ret = 0;
+  if(!bWriteBackEnable_){
+    return 0;
+  }
+
+  if(writeback_conn == NULL){
+    return 0;
+  }
+
+  if (writeback_conn->writeback_fb_id().id() == 0 ||
+      writeback_conn->writeback_out_fence().id() == 0) {
+    ALOGE("Writeback properties don't exit");
+    return -EINVAL;
+  }
+
+  ret = drmModeAtomicAddProperty(pset, writeback_conn->id(),
+                                 writeback_conn->writeback_fb_id().id(),
+                                 0);
+  if (ret < 0) {
+    ALOGE("Failed to add writeback_fb_id");
+    return ret;
+  }
+
+  ret = drmModeAtomicAddProperty(pset, writeback_conn->id(),
+                                 writeback_conn->crtc_id_property().id(),
+                                 0);
+  if (ret < 0) {
+    ALOGE("Failed to  attach writeback");
+    return ret;
+  }
+
+  bWriteBackRequestDisable_ = true;
+  HWC2_ALOGD_IF_DEBUG("Reset WB: conn-id=%d ", writeback_conn->id());
+  return 0;
+}
+
 
 int DrmDisplayCompositor::CheckOverscan(drmModeAtomicReqPtr pset, DrmCrtc* crtc, int display, const char *unique_name){
   int ret = 0;
@@ -661,17 +712,21 @@ int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
   }
 
   // WriteBack Mode
-  if(!test_only && resource_manager_->isWBMode()){
-    int wbDisplay = resource_manager_->GetWBDisplay();
-    if(wbDisplay == display_){
-      ret = SetupWritebackCommit(pset,
-                                 crtc->id(),
-                                 drm->GetWritebackConnectorForDisplay(wbDisplay),
-                                 NULL);
-      if (ret < 0) {
-        ALOGE("Failed to Setup Writeback Commit ret = %d", ret);
-        return ret;
+  if(!test_only){
+    if(resource_manager_->isWBMode()){
+      int wbDisplay = resource_manager_->GetWBDisplay();
+      if(wbDisplay == display_){
+        ret = SetupWritebackCommit(pset,
+                                  crtc->id(),
+                                  drm->GetWritebackConnectorForDisplay(wbDisplay),
+                                  NULL);
+        if (ret < 0) {
+          ALOGE("Failed to Setup Writeback Commit ret = %d", ret);
+          return ret;
+        }
       }
+    }else{
+      DisableWritebackCommit(pset, drm->GetWritebackConnectorForDisplay(0));
     }
   }
 
@@ -1056,6 +1111,9 @@ void DrmDisplayCompositor::Commit() {
     }else{
       close(writeback_fence_);
       writeback_fence_ = -1;
+      if(bWriteBackRequestDisable_ && ret == 0){
+        bWriteBackEnable_ = false;
+      }
     }
 
   }
