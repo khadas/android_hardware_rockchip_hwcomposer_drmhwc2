@@ -981,10 +981,23 @@ bool DrmConnector::is_hdmi_support_hdr() const
     return (hdr_metadata_property_.id() && bSupportSt2084_) || (hdr_metadata_property_.id() && bSupportHLG_);
 }
 
-int DrmConnector::switch_hdmi_hdr_mode(android_dataspace_t input_colorspace){
+int DrmConnector::switch_hdmi_hdr_mode(drmModeAtomicReqPtr pset,
+                                       android_dataspace_t input_colorspace){
   std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
-  ALOGD_IF(LogLevel(DBG_DEBUG),"%s:line=%d, connector-id=%d, isSupportSt2084 = %d, isSupportHLG = %d , colorspace = %x",
-            __FUNCTION__,__LINE__,id(),isSupportSt2084(),isSupportHLG(),input_colorspace);
+  HWC2_ALOGD_IF_DEBUG("conn-id=%d, isSupportSt2084 = %d, isSupportHLG = %d , colorspace = %x",
+                      id(),isSupportSt2084(),isSupportHLG(),input_colorspace);
+
+  if (!pset) {
+      ALOGE("%s:line=%d Failed to allocate property set", __FUNCTION__, __LINE__);
+      return -1;
+  }
+
+  // 释放上一次的 Blob
+  if (blob_id_){
+      drm_->DestroyPropertyBlob(blob_id_);
+      blob_id_ = 0;
+  }
+
   struct hdr_output_metadata hdr_metadata;
   memset(&hdr_metadata, 0, sizeof(struct hdr_output_metadata));
 
@@ -995,84 +1008,49 @@ int DrmConnector::switch_hdmi_hdr_mode(android_dataspace_t input_colorspace){
 #endif
 
   if((input_colorspace & HAL_DATASPACE_TRANSFER_MASK) == HAL_DATASPACE_TRANSFER_ST2084
-      && isSupportSt2084()){
-      ALOGD_IF(LogLevel(DBG_DEBUG),"%s:line=%d has st2084",__FUNCTION__,__LINE__);
+          && isSupportSt2084()){
+      HWC2_ALOGD_IF_DEBUG("has st2084");
       hdmi_metadata_type.eotf = SMPTE_ST2084;
   }else if((input_colorspace & HAL_DATASPACE_TRANSFER_MASK) == HAL_DATASPACE_TRANSFER_HLG
-      && isSupportHLG()){
-      ALOGD_IF(LogLevel(DBG_DEBUG),"%s:line=%d has HLG",__FUNCTION__,__LINE__);
+            && isSupportHLG()){
+      HWC2_ALOGD_IF_DEBUG("has HLG");
       hdmi_metadata_type.eotf = HLG;
   }else{
-      //ALOGE("Unknow etof %d",eotf);
       hdmi_metadata_type.eotf = TRADITIONAL_GAMMA_SDR;
   }
 
-  uint32_t blob_id = 0;
   DrmColorspaceType colorspace = DrmColorspaceType::DEFAULT;
   int ret = -1;
   bool hdr_state_update = false;
-  if(hdr_metadata_property().id())
-  {
-      ALOGD_IF(LogLevel(DBG_DEBUG),"%s: android_colorspace = 0x%x", __FUNCTION__, colorspace);
-      drmModeAtomicReqPtr pset = drmModeAtomicAlloc();
-      if (!pset) {
-          ALOGE("%s:line=%d Failed to allocate property set", __FUNCTION__, __LINE__);
-          return -1;
+  if(hdr_metadata_property().id()){
+      HWC2_ALOGD_IF_DEBUG("hdr_metadata eotf=0x%x", hdmi_metadata_type.eotf);
+      drm_->CreatePropertyBlob(&hdr_metadata, sizeof(struct hdr_output_metadata), &blob_id_);
+      ret = drmModeAtomicAddProperty(pset, id(), hdr_metadata_property().id(), blob_id_);
+      if (ret < 0) {
+        HWC2_ALOGE("Failed to add prop[%d] to [%d]", hdr_metadata_property().id(), id());
       }
-      if(!memcmp(&last_hdr_metadata_, &hdr_metadata, sizeof(struct hdr_output_metadata))){
-          ALOGD_IF(LogLevel(DBG_DEBUG),"%s: no need to update metadata", __FUNCTION__);
-      }else{
-        hdr_state_update = true;
-        ALOGD_IF(LogLevel(DBG_DEBUG),"%s: hdr_metadata eotf=0x%x", __FUNCTION__,hdmi_metadata_type.eotf);
-        drm_->CreatePropertyBlob(&hdr_metadata, sizeof(struct hdr_output_metadata), &blob_id);
-        ret = drmModeAtomicAddProperty(pset, id(), hdr_metadata_property().id(), blob_id);
-        if (ret < 0) {
-          ALOGE("%s:line=%d Failed to add prop[%d] to [%d]", __FUNCTION__, __LINE__, hdr_metadata_property().id(), id());
-        }
-      }
+  }
 
-      if(colorspace_property().id()){
-          if((input_colorspace & HAL_DATASPACE_STANDARD_BT2020) == HAL_DATASPACE_STANDARD_BT2020){
-              if(uColorFormat_ == output_rgb)
-                colorspace = DrmColorspaceType::BT2020_RGB;
-              else
-                colorspace = DrmColorspaceType::BT2020_YCC;
-          }
-
-          if(colorspace_ != colorspace){
-              hdr_state_update = true;
-              ALOGD_IF(LogLevel(DBG_DEBUG),"%s: change bt2020 colorspace=%d", __FUNCTION__, colorspace);
-              ret = drmModeAtomicAddProperty(pset, id(), colorspace_property().id(), colorspace);
-              if (ret < 0) {
-                ALOGE("%s:line=%d Failed to add prop[%d] to [%d]", __FUNCTION__, __LINE__,colorspace_property().id(), id());
-              }
-          }else{
-              ALOGD_IF(LogLevel(DBG_DEBUG),"%s: no need to update colorspace", __FUNCTION__);
+  if(colorspace_property().id()){
+      if((input_colorspace & HAL_DATASPACE_STANDARD_BT2020) == HAL_DATASPACE_STANDARD_BT2020){
+          if(uColorFormat_ == output_rgb){
+            colorspace = DrmColorspaceType::BT2020_RGB;
+          } else {
+            colorspace = DrmColorspaceType::BT2020_YCC;
           }
       }
-      if(hdr_state_update){
-        ret = drmModeAtomicCommit(drm_->fd(), pset, DRM_MODE_ATOMIC_ALLOW_MODESET, drm_);
-        if (ret < 0) {
-            ALOGE("%s:line=%d Failed to commit pset ret=%d\n", __FUNCTION__, __LINE__, ret);
-            drmModeAtomicFree(pset);
-            return ret;
-        }else{
-            memcpy(&last_hdr_metadata_, &hdr_metadata, sizeof(struct hdr_output_metadata));
-            colorspace_ = colorspace;
-        }
-      }
-      if (blob_id)
-          drm_->DestroyPropertyBlob(blob_id);
 
-      drmModeAtomicFree(pset);
-      return 0;
+      HWC2_ALOGD_IF_DEBUG("change bt2020 colorspace=%d", colorspace);
+      ret = drmModeAtomicAddProperty(pset, id(), colorspace_property().id(), colorspace);
+      if (ret < 0) {
+        HWC2_ALOGE("Failed to add prop[%d] to [%d]", colorspace_property().id(), id());
+      }
   }
-  else
-  {
-      ALOGD_IF(LogLevel(DBG_DEBUG),"%s: hdmi don't support hdr metadata", __FUNCTION__);
-      return -1;
-  }
-  return -1;
+
+  memcpy(&last_hdr_metadata_, &hdr_metadata, sizeof(struct hdr_output_metadata));
+  colorspace_ = colorspace;
+  return 0;
+
 }
 
 const DrmProperty &DrmConnector::brightness_id_property() const {

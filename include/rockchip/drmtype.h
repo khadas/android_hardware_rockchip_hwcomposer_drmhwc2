@@ -228,6 +228,7 @@ typedef struct hwc2_drm_display {
   int display_timeline=0;
   int hotplug_timeline=0;
   bool hdr_mode=false;
+  android_dataspace_t dataspace = HAL_DATASPACE_UNKNOWN;
   char overscan_value[PROPERTY_VALUE_MAX]={0};
   const struct disp_info* baseparameter_info;
 } hwc2_drm_display_t;

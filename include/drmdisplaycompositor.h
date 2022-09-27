@@ -77,6 +77,15 @@ class DrmDisplayCompositor {
     uint32_t old_blob_id = 0;
   };
 
+  struct HdrState{
+    bool enable_;
+    android_dataspace_t datespace_;
+  };
+
+  struct ModeSetState{
+    HdrState hdr_;
+  };
+
   DrmDisplayCompositor(const DrmDisplayCompositor &) = delete;
 
   // We'll wait for acquire fences to fire for kAcquireWaitTimeoutMs,
@@ -110,7 +119,9 @@ class DrmDisplayCompositor {
                            DrmHwcBuffer *writeback_buffer);
   int DisableWritebackCommit(drmModeAtomicReqPtr pset,
                              DrmConnector *writeback_conn);
-
+  int CollectModeSetInfo(drmModeAtomicReqPtr pset,
+                         DrmDisplayComposition *display_comp);
+  int UpdateModeSetState();
   int ApplyDpms(DrmDisplayComposition *display_comp);
   int DisablePlanes(DrmDisplayComposition *display_comp);
 
@@ -151,6 +162,11 @@ class DrmDisplayCompositor {
   bool clear_;
 
   ModeState mode_;
+
+  // RK Support:
+  bool need_mode_set_;
+  ModeSetState request_mode_set_;
+  ModeSetState current_mode_set_;
 
   int framebuffer_index_;
   DrmFramebuffer framebuffers_[DRM_DISPLAY_BUFFERS];

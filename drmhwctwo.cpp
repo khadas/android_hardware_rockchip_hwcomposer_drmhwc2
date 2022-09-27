@@ -1525,6 +1525,9 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition() {
     AddFenceToRetireFence(composition->take_out_fence());
   }
 
+  // 配置 HDR mode
+  composition->SetDisplayHdrMode(ctx_.hdr_mode, ctx_.dataspace);
+
   ret = compositor_->QueueComposition(std::move(composition));
   return HWC2::Error::None;
 }
@@ -2531,9 +2534,10 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
     char value[PROPERTY_VALUE_MAX];
     property_get("persist.vendor.hwc.hdr_force_disable", value, "0");
     if(atoi(value) > 0){
-      if(ctx_.hdr_mode && !connector_->switch_hdmi_hdr_mode(HAL_DATASPACE_UNKNOWN)){
+      if(ctx_.hdr_mode){
         ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
         ctx_.hdr_mode = false;
+        ctx_.dataspace = HAL_DATASPACE_UNKNOWN;
         property_set("vendor.hwc.hdr_state","FORCE-NORMAL");
       }
       ALOGD_IF(LogLevel(DBG_DEBUG),"Fource Disable HDR mode.");
@@ -2542,9 +2546,10 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
 
     property_get("persist.vendor.hwc.hdr_video_area", value, "6");
     if(atoi(value) > hdr_area_ratio){
-      if(ctx_.hdr_mode && !connector_->switch_hdmi_hdr_mode(HAL_DATASPACE_UNKNOWN)){
+      if(ctx_.hdr_mode){
         ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
         ctx_.hdr_mode = false;
+        ctx_.dataspace = HAL_DATASPACE_UNKNOWN;
         property_set("vendor.hwc.hdr_state","FORCE-NORMAL");
       }
       ALOGD_IF(LogLevel(DBG_DEBUG),"Force Disable HDR mode.");
@@ -2555,20 +2560,20 @@ int DrmHwcTwo::HwcDisplay::SwitchHdrMode(){
   for(auto &drmHwcLayer : drm_hwc_layers_)
     if(drmHwcLayer.bHdr_){
       if(connector_->is_hdmi_support_hdr()){
-        if(!ctx_.hdr_mode && !connector_->switch_hdmi_hdr_mode(drmHwcLayer.eDataSpace_)){
+        if(!ctx_.hdr_mode){
           ALOGD_IF(LogLevel(DBG_DEBUG),"Enable HDR mode success");
           ctx_.hdr_mode = true;
+          ctx_.dataspace = drmHwcLayer.eDataSpace_;
           property_set("vendor.hwc.hdr_state","HDR");
         }
       }
   }
 
   if(!exist_hdr_layer && ctx_.hdr_mode){
-    if(!connector_->switch_hdmi_hdr_mode(HAL_DATASPACE_UNKNOWN)){
-      ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
-      ctx_.hdr_mode = false;
-      property_set("vendor.hwc.hdr_state","NORMAL");
-    }
+    ALOGD_IF(LogLevel(DBG_DEBUG),"Exit HDR mode success");
+    ctx_.hdr_mode = false;
+    ctx_.dataspace = HAL_DATASPACE_UNKNOWN;
+    property_set("vendor.hwc.hdr_state","NORMAL");
   }
 
   return 0;

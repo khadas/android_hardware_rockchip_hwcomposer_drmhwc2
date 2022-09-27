@@ -156,6 +156,7 @@ class DrmDisplayComposition {
   int AddPlaneDisable(DrmPlane *plane);
   int SetDpmsMode(uint32_t dpms_mode);
   int SetDisplayMode(const DrmMode &display_mode);
+  int SetDisplayHdrMode(bool hdr_mode, android_dataspace_t dataspace);
 
   int DisableUnusedPlanes();
   int CreateAndAssignReleaseFences(SyncTimeline &sync_timeline);
@@ -217,6 +218,9 @@ class DrmDisplayComposition {
     return has_svep_layer_;
   }
 
+  bool hdr_mode() const{ return hdr_mode_;}
+  android_dataspace_t dataspace() const{ return dataspace_;}
+
   void Dump(std::ostringstream *out) const;
 
  private:
@@ -230,6 +234,9 @@ class DrmDisplayComposition {
   DrmCompositionType type_ = DRM_COMPOSITION_TYPE_EMPTY;
   uint32_t dpms_mode_ = DRM_MODE_DPMS_ON;
   DrmMode display_mode_;
+
+  bool hdr_mode_;
+  android_dataspace_t dataspace_;
 
   int timeline_ = 0;
   int timeline_current_ = 0;

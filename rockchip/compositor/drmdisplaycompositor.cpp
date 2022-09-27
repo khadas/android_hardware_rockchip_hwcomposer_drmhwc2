@@ -685,6 +685,56 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
   return 0;
 }
 
+int DrmDisplayCompositor::CollectModeSetInfo(drmModeAtomicReqPtr pset,
+                                            DrmDisplayComposition *display_comp) {
+  ATRACE_CALL();
+  int ret = 0;
+  DrmDevice *drm = resource_manager_->GetDrmDevice(display_);
+  //uint64_t out_fences[drm->crtcs().size()];
+
+  DrmConnector *connector = drm->GetConnectorForDisplay(display_);
+  if (!connector) {
+    ALOGE("Could not locate connector for display %d", display_);
+    return -ENODEV;
+  }
+  DrmCrtc *crtc = drm->GetCrtcForDisplay(display_);
+  if (!crtc) {
+    ALOGE("Could not locate crtc for display %d", display_);
+    return -ENODEV;
+  }
+
+  // 若 HDR 状态发生改变，则更新 HDR状态.
+  if(display_comp->hdr_mode() != current_mode_set_.hdr_.enable_){
+    int ret = connector->switch_hdmi_hdr_mode(pset, display_comp->dataspace());
+    if(ret){
+      ALOGE("display %d enable hdr fail. datespace=%x",
+              display_, display_comp->dataspace());
+    }else{
+      HWC2_ALOGD_IF_INFO("%s HDR mode.", display_comp->hdr_mode() ? "Enable" : "Disable");
+      request_mode_set_.hdr_.enable_    = display_comp->hdr_mode();
+      request_mode_set_.hdr_.datespace_ = display_comp->dataspace();
+      need_mode_set_ = true;
+    }
+  }
+
+  return 0;
+}
+
+int DrmDisplayCompositor::UpdateModeSetState() {
+  ATRACE_CALL();
+  int ret = 0;
+  if(!need_mode_set_){
+    return 0;
+  }
+
+  // Update HDR state：
+  current_mode_set_.hdr_.enable_    = request_mode_set_.hdr_.enable_;
+  current_mode_set_.hdr_.datespace_ = request_mode_set_.hdr_.datespace_;
+
+  need_mode_set_ = false;
+  return 0;
+}
+
 int DrmDisplayCompositor::CollectCommitInfo(drmModeAtomicReqPtr pset,
                                             DrmDisplayComposition *display_comp,
                                             bool test_only,
@@ -1069,14 +1119,23 @@ int DrmDisplayCompositor::CollectInfo(
       return -1;
     }
     ret = CollectCommitInfo(pset_, composition.get(), false);
+    if (ret) {
+      ALOGE("CollectCommitInfo failed for display %d", display_);
+      // Disable the hw used by the last active composition. This allows us to
+      // signal the release fences from that composition to avoid hanging.
+      return ret;
+    }
+
+    // 配置 modeset 信息
+    ret = CollectModeSetInfo(pset_, composition.get());
+    if (ret) {
+      ALOGE("CollectModeSetInfo failed for display %d", display_);
+      // Disable the hw used by the last active composition. This allows us to
+      // signal the release fences from that composition to avoid hanging.
+      return ret;
+    }
   }
 
-  if (ret) {
-    ALOGE("Composite failed for display %d", display_);
-    // Disable the hw used by the last active composition. This allows us to
-    // signal the release fences from that composition to avoid hanging.
-    return ret;
-  }
   collect_composition_map_.insert(std::make_pair<int,std::unique_ptr<DrmDisplayComposition>>(composition->display(),std::move(composition)));
   return 0;
 }
@@ -1096,7 +1155,9 @@ void DrmDisplayCompositor::Commit() {
     pset_=NULL;
   }else{
     GetTimestamp();
+    UpdateModeSetState();
   }
+
 
   // WriteBack Fence handle.
   if(writeback_fence_ > 0){
@@ -1115,7 +1176,6 @@ void DrmDisplayCompositor::Commit() {
         bWriteBackEnable_ = false;
       }
     }
-
   }
 
   if (pset_){

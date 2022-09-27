@@ -125,7 +125,8 @@ class DrmConnector {
   bool isSupportSt2084() { return bSupportSt2084_; }
   bool isSupportHLG() { return bSupportHLG_; }
   bool is_hdmi_support_hdr() const;
-  int switch_hdmi_hdr_mode(android_dataspace_t colorspace);
+  int switch_hdmi_hdr_mode(drmModeAtomicReqPtr pset,
+                           android_dataspace_t colorspace);
 
   int GetSpiltModeId() const;
   bool isHorizontalSpilt() const;
@@ -254,6 +255,8 @@ class DrmConnector {
 
   // Connector mirror
   std::map<DrmCrtc*, std::vector<int>> mMapCrtcDisplays_;
+
+  uint32_t blob_id_ = 0;
 
   mutable std::recursive_mutex mRecursiveMutex;
 };
