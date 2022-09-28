@@ -227,7 +227,7 @@ class DrmDevice {
 
   std::map<int, std::vector<DrmConnector*>> mMapMirrorStateStore_;
 
-  mutable std::mutex mtx_;
+  mutable std::recursive_mutex mRecursiveMutex;
 };
 }  // namespace android
 

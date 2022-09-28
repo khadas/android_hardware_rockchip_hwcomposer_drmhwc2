@@ -1081,7 +1081,7 @@ void DrmDevice::ConfigurePossibleDisplays(){
 }
 
 int DrmDevice::UpdateDisplayGamma(int display_id){
-  std::lock_guard<std::mutex> lock(mtx_);
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
   if (!conn || conn->state() != DRM_MODE_CONNECTED ||
       !conn->encoder() || !conn->encoder()->crtc()){
@@ -1128,7 +1128,7 @@ int DrmDevice::UpdateDisplayGamma(int display_id){
 }
 
 int DrmDevice::UpdateDisplay3DLut(int display_id){
-  std::lock_guard<std::mutex> lock(mtx_);
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
 
   if (!conn || conn->state() != DRM_MODE_CONNECTED ||
@@ -1176,7 +1176,7 @@ int DrmDevice::UpdateDisplay3DLut(int display_id){
 }
 
 int DrmDevice::UpdateDisplayMode(int display_id){
-  std::lock_guard<std::mutex> lock(mtx_);
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
   if (!conn || conn->state() != DRM_MODE_CONNECTED   ||
       !conn->current_mode().id() || !conn->encoder() ||
@@ -1275,7 +1275,7 @@ int DrmDevice::UpdateDisplayMode(int display_id){
 
 // Update VRR refresh rate
 int DrmDevice::UpdateVrrRefreshRate(int display_id, int refresh_rate){
-  std::lock_guard<std::mutex> lock(mtx_);
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
   // 1. 检查 Connector 状态
   int ret = CheckConnectorState(display_id, conn);
@@ -1762,7 +1762,7 @@ int DrmDevice::DisableAllPlaneForCrtc(int display_id,
 
 // Bind DrmConnector and DrmCrtc resource.
 int DrmDevice::BindDpyRes(int display_id){
-  std::lock_guard<std::mutex> lock(mtx_);
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   DrmConnector *conn = GetConnectorForDisplay(display_id);
   // 1. 检查 Connector 状态
   int ret = CheckConnectorState(display_id, conn);
@@ -1826,7 +1826,7 @@ int DrmDevice::BindDpyRes(int display_id){
 
 // Release DrmConnector and DrmCrtc resource.
 int DrmDevice::ReleaseDpyRes(int display_id, DrmModeChangeUsage usage ){
-  std::lock_guard<std::mutex> lock(mtx_);
+  std::unique_lock<std::recursive_mutex> lock(mRecursiveMutex);
   int ret;
   DrmConnector *conn = GetConnectorForDisplay(display_id);
   if (!conn) {
