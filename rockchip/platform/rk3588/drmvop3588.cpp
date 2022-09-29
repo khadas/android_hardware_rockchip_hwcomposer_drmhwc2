@@ -61,6 +61,8 @@ void Vop3588::Init(){
 
   ctx.state.bRgaPolicyEnable = hwc_get_int_property("vendor.hwc.enable_rga_policy","0") > 0;
 
+  ctx.state.iVopMaxOverlay4KPlane = hwc_get_int_property("vendor.hwc.vop_max_overlay_4k_plane","0");
+
 #ifdef USE_LIBSVEP
   InitSvep();
 #endif
@@ -1171,6 +1173,8 @@ int Vop3588::MatchPlanes(
   LayerMap layer_map;
   int ret = CombineLayer(layer_map, layers, plane_groups.size());
 
+  int total_size = 0;
+
   // Fill up the remaining planes
   int zpos = 0;
   for (auto i = layer_map.begin(); i != layer_map.end(); i = layer_map.erase(i)) {
@@ -1184,6 +1188,23 @@ int Vop3588::MatchPlanes(
       return ret;
     }
     zpos++;
+
+    // 总数据量超过，iVopMaxOverlay4KPlane 层 4K RGBA 图层，则认为匹配失败。
+    if(ctx.state.iVopMaxOverlay4KPlane > 0 ){
+      for( auto layer : i->second){
+        if(layer->iSize_ > 0){
+          total_size += layer->iSize_;
+        }
+        HWC2_ALOGD_IF_DEBUG(" total_size =%d + %s size=%d",total_size,layer->sLayerName_.c_str(),layer->iSize_);
+      }
+      if( total_size > 4096*2160*4*ctx.state.iVopMaxOverlay4KPlane ){
+        HWC2_ALOGD_IF_DEBUG("total_size (%d) is too big to fail match policy.", total_size);
+        ResetLayer(layers);
+        ResetPlaneGroups(plane_groups);
+        composition->clear();
+        return -1;
+      }
+    }
   }
   return 0;
 }
@@ -1690,6 +1711,7 @@ int Vop3588::TryMixSidebandPolicy(
     layer_indices.first = layers.size() - 2 <= 0 ? 1 : layers.size() - 2;
   else
     layer_indices.first = 3;
+
   layer_indices.second = layers.size() - 1;
   ALOGD_IF(LogLevel(DBG_DEBUG), "%s:mix sideband (%d,%d)",__FUNCTION__,layer_indices.first, layer_indices.second);
   OutputMatchLayer(layer_indices.first, layer_indices.second, layers, tmp_layers);
@@ -2317,7 +2339,6 @@ int Vop3588::TryMixPolicy(
   ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
   int ret;
 
-
   if(ctx.state.setHwcPolicy.count(HWC_SIDEBAND_LOPICY)){
     ret = TryMixSidebandPolicy(composition,layers,crtc,plane_groups);
     if(!ret)
@@ -2718,6 +2739,8 @@ void Vop3588::InitStateContext(
   ALOGI_IF(LogLevel(DBG_DEBUG),"%s,line=%d bMultiAreaEnable=%d, bMultiAreaScaleEnable=%d",
             __FUNCTION__,__LINE__,ctx.state.bMultiAreaEnable,ctx.state.bMultiAreaScaleEnable);
 
+  ctx.state.iVopMaxOverlay4KPlane = hwc_get_int_property("vendor.hwc.vop_max_overlay_4k_plane","0");
+
   // Check dispaly Mode : 8K Mode or 4K 120 Mode
   DrmDevice *drm = crtc->getDrmDevice();
   DrmConnector *conn = drm->GetConnectorForDisplay(crtc->display());
@@ -2816,6 +2839,7 @@ void Vop3588::TryMix(){
     ctx.state.setHwcPolicy.insert(HWC_RGA_OVERLAY_LOPICY);
     ctx.state.setHwcPolicy.insert(HWC_MIX_VIDEO_LOPICY);
   }
+
   if(ctx.request.iSkipCnt > 0)
     ctx.state.setHwcPolicy.insert(HWC_MIX_SKIP_LOPICY);
   if(ctx.request.bSidebandStreamMode)

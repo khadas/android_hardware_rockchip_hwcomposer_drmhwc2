@@ -2991,7 +2991,9 @@ void DrmHwcTwo::HwcLayer::PopulateFB(hwc2_layer_t layer_id, DrmHwcLayer *drmHwcL
     drmHwcLayer->iWidth_  = -1;
     drmHwcLayer->iHeight_ = -1;
     drmHwcLayer->iStride_ = -1;
-    drmHwcLayer->iSize_   = -1;
+    // 由于 validate 没有实际的handle, 故此处的size通过crop信息预估,格式为 RGBA
+    drmHwcLayer->iSize_   = (mCurrentState.source_crop_.right - mCurrentState.source_crop_.left) *
+                            (mCurrentState.source_crop_.bottom - mCurrentState.source_crop_.top) * 4;
     drmHwcLayer->iFormat_ = -1;
     drmHwcLayer->iUsage   = -1;
     drmHwcLayer->iHeightStride_ = -1;

@@ -171,6 +171,8 @@ typedef struct StateContext{
   // rga policy
   bool bRgaPolicyEnable=false;
 
+  int iVopMaxOverlay4KPlane=0;
+
   // Video state
   bool bLargeVideo=false;
   bool bDisableFBAfbcd=false;
@@ -178,6 +180,7 @@ typedef struct StateContext{
   // Soc id
   int iSocId=0;
   std::set<ComposeMode> setHwcPolicy;
+  int iMixRequest_;
 
   // 8k display mode
   bool b8kMode_;
