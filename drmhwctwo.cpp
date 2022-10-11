@@ -1241,6 +1241,15 @@ HWC2::Error DrmHwcTwo::HwcDisplay::InitDrmHwcLayer() {
   drm_hwc_layers_.emplace_back();
   DrmHwcLayer &client_target_layer = drm_hwc_layers_.back();
   client_layer_.PopulateFB(client_id, &client_target_layer, &ctx_, frame_no_, true);
+#ifdef USE_LIBPQ
+  if(handle_ == 0){
+    int ret = client_layer_.DoPq(true, &client_target_layer, &ctx_);
+    if(ret){
+      HWC2_ALOGE("ClientLayer DoPq fail, ret = %d", ret);
+    }
+  }
+#endif
+
   ALOGD_HWC2_DRM_LAYER_INFO((DBG_INFO),drm_hwc_layers_);
 
   return HWC2::Error::None;
@@ -1425,6 +1434,14 @@ int DrmHwcTwo::HwcDisplay::ImportBuffers() {
           ALOGE("Failed to get_gemhanle client_layer, ret=%d", ret);
           return ret;
         }
+#ifdef USE_LIBPQ
+        if(handle_ == 0){
+          int ret = client_layer_.DoPq(false, &drm_hwc_layer, &ctx_);
+          if(ret){
+            HWC2_ALOGE("ClientLayer DoPq fail, ret = %d", ret);
+          }
+        }
+#endif
       }
     }
   }
@@ -3007,6 +3024,191 @@ void DrmHwcTwo::HwcLayer::PopulateFB(hwc2_layer_t layer_id, DrmHwcLayer *drmHwcL
   return;
 }
 
+
+#ifdef USE_LIBPQ
+int DrmHwcTwo::HwcLayer::DoPq(bool validate, DrmHwcLayer *drmHwcLayer, hwc2_drm_display_t* ctx){
+  char value[PROPERTY_VALUE_MAX];
+  property_get("persist.vendor.pq.mode", value, "0");
+  bool pq_mode_enable = atoi(value) > 0;
+  static bool use_pq_fb = false;
+  if(pq_mode_enable == 1){
+    if(validate){
+      if(bufferQueue_ == NULL){
+        bufferQueue_ = std::make_shared<DrmBufferQueue>();
+      }
+      if(pq_ == NULL){
+        pq_ = Pq::Get();
+        if(pq_ != NULL){
+          bPqReady_ = true;
+          HWC2_ALOGI("Pq module ready. to enable PqMode.");
+        }
+      }
+      if(bPqReady_){
+        // 1. Init Ctx
+        int ret = pq_->InitCtx(pqCtx_);
+        if(ret){
+          HWC2_ALOGE("Pq ctx init fail");
+          return ret;
+        }
+        // 2. Set buffer Info
+        PqImageInfo src;
+        src.mBufferInfo_.iFd_     = 1;
+        src.mBufferInfo_.iWidth_  = drmHwcLayer->iFbWidth_;
+        src.mBufferInfo_.iHeight_ = drmHwcLayer->iFbHeight_;
+        src.mBufferInfo_.iFormat_ = HAL_PIXEL_FORMAT_RGBA_8888;
+        // src.mBufferInfo_.iSize_   = drmHwcLayer->iFbWidth_ * drmHwcLayer->iFbHeight_ * 4;
+        src.mBufferInfo_.iStride_ = drmHwcLayer->iFbWidth_;
+        src.mBufferInfo_.uBufferId_ = 0x1;
+
+        src.mCrop_.iLeft_  = (int)drmHwcLayer->source_crop.left;
+        src.mCrop_.iTop_   = (int)drmHwcLayer->source_crop.top;
+        src.mCrop_.iRight_ = (int)drmHwcLayer->source_crop.right;
+        src.mCrop_.iBottom_= (int)drmHwcLayer->source_crop.bottom;
+
+        ret = pq_->SetSrcImage(pqCtx_, src);
+        if(ret){
+          printf("pq SetSrcImage fail\n");
+          return ret;
+        }
+        use_pq_fb = true;
+      }
+    }else if(use_pq_fb){
+      use_pq_fb = false;
+      if(bufferQueue_ == NULL){
+        bufferQueue_ = std::make_shared<DrmBufferQueue>();
+      }
+      if(pq_ == NULL){
+        pq_ = Pq::Get();
+        if(pq_ != NULL){
+          bPqReady_ = true;
+          HWC2_ALOGI("pq module ready. to enable pqMode.");
+        }
+      }
+      if(bPqReady_){
+        // 1. Init Ctx
+        int ret = pq_->InitCtx(pqCtx_);
+        if(ret){
+          HWC2_ALOGE("Pq ctx init fail");
+          return ret;
+        }
+        // 2. Set buffer Info
+        PqImageInfo src;
+        src.mBufferInfo_.iFd_     = drmHwcLayer->iFd_;
+        src.mBufferInfo_.iWidth_  = drmHwcLayer->iWidth_;
+        src.mBufferInfo_.iHeight_ = drmHwcLayer->iHeight_;
+        src.mBufferInfo_.iFormat_ = drmHwcLayer->iFormat_;
+        src.mBufferInfo_.iStride_ = drmHwcLayer->iStride_;
+        // src.mBufferInfo_.iSize_   = drmHwcLayer->iSize_;
+        src.mBufferInfo_.uBufferId_ = drmHwcLayer->uBufferId_;
+        src.mBufferInfo_.uDataSpace_ = (uint64_t)drmHwcLayer->eDataSpace_;
+
+        src.mCrop_.iLeft_  = (int)drmHwcLayer->source_crop.left;
+        src.mCrop_.iTop_   = (int)drmHwcLayer->source_crop.top;
+        src.mCrop_.iRight_ = (int)drmHwcLayer->source_crop.right;
+        src.mCrop_.iBottom_= (int)drmHwcLayer->source_crop.bottom;
+
+        ret = pq_->SetSrcImage(pqCtx_, src);
+        if(ret){
+          printf("Pq SetSrcImage fail\n");
+          return ret;
+        }
+
+        // 4. Alloc Dst buffer
+        std::shared_ptr<DrmBuffer> dst_buffer;
+        dst_buffer = bufferQueue_->DequeueDrmBuffer(ctx->framebuffer_width,
+                                                    ctx->framebuffer_height,
+                                                    HAL_PIXEL_FORMAT_YCrCb_NV12,
+                                                    RK_GRALLOC_USAGE_STRIDE_ALIGN_64,
+                                                    "PQ-FB-target");
+
+        if(dst_buffer == NULL){
+          HWC2_ALOGD_IF_DEBUG("DequeueDrmBuffer fail!, skip this policy.");
+          return -1;
+        }
+
+        // 5. Set buffer Info
+        PqImageInfo dst;
+        dst.mBufferInfo_.iFd_     = dst_buffer->GetFd();
+        dst.mBufferInfo_.iWidth_  = dst_buffer->GetWidth();
+        dst.mBufferInfo_.iHeight_ = dst_buffer->GetHeight();
+        dst.mBufferInfo_.iFormat_ = dst_buffer->GetFormat();
+        dst.mBufferInfo_.iStride_ = dst_buffer->GetStride();
+        dst.mBufferInfo_.uBufferId_ = dst_buffer->GetBufferId();
+
+        dst.mCrop_.iLeft_  = (int)drmHwcLayer->source_crop.left;
+        dst.mCrop_.iTop_   = (int)drmHwcLayer->source_crop.top;
+        dst.mCrop_.iRight_ = (int)drmHwcLayer->source_crop.right;
+        dst.mCrop_.iBottom_= (int)drmHwcLayer->source_crop.bottom;
+
+        dst.mCrop_.iLeft_  = 0;
+        dst.mCrop_.iTop_   = 0;
+        dst.mCrop_.iRight_ = ctx->framebuffer_width;
+        dst.mCrop_.iBottom_= ctx->framebuffer_height;
+
+        ret = pq_->SetDstImage(pqCtx_, dst);
+        if(ret){
+          printf("Pq SetSrcImage fail\n");
+          bufferQueue_->QueueBuffer(dst_buffer);
+          return ret;
+        }
+
+        hwc_frect_t source_crop;
+        source_crop.left   = 0;
+        source_crop.top    = 0;
+        source_crop.right  = ctx->framebuffer_width;
+        source_crop.bottom = ctx->framebuffer_height;
+        drmHwcLayer->UpdateAndStoreInfoFromDrmBuffer(dst_buffer->GetHandle(),
+                                                  dst_buffer->GetFd(),
+                                                  dst_buffer->GetFormat(),
+                                                  dst_buffer->GetWidth(),
+                                                  dst_buffer->GetHeight(),
+                                                  dst_buffer->GetStride(),
+                                                  dst_buffer->GetHeightStride(),
+                                                  dst_buffer->GetByteStride(),
+                                                  dst_buffer->GetSize(),
+                                                  dst_buffer->GetUsage(),
+                                                  dst_buffer->GetFourccFormat(),
+                                                  dst_buffer->GetModifier(),
+                                                  dst_buffer->GetName(),
+                                                  source_crop,
+                                                  dst_buffer->GetBufferId(),
+                                                  dst_buffer->GetGemHandle(),
+                                                  drmHwcLayer->transform);
+        if(drmHwcLayer->acquire_fence->isValid()){
+          ret = drmHwcLayer->acquire_fence->wait(1500);
+          if(ret){
+            HWC2_ALOGE("wait Fb-Target 1500ms timeout, ret=%d",ret);
+            drmHwcLayer->bUsePq_ = false;
+            bufferQueue_->QueueBuffer(dst_buffer);
+            return ret;
+          }
+        }
+        int output_fence = 0;
+        ret = pq_->RunAsync(pqCtx_, &output_fence);
+        if(ret){
+          HWC2_ALOGD_IF_DEBUG("RunAsync fail!");
+          drmHwcLayer->bUsePq_ = false;
+          bufferQueue_->QueueBuffer(dst_buffer);
+          return ret;
+        }
+        dst_buffer->SetFinishFence(dup(output_fence));
+        drmHwcLayer->acquire_fence = sp<AcquireFence>(new AcquireFence(output_fence));
+
+        property_get("vendor.dump", value, "false");
+        if(!strcmp(value, "true")){
+          drmHwcLayer->acquire_fence->wait();
+          dst_buffer->DumpData();
+        }
+        bufferQueue_->QueueBuffer(dst_buffer);
+      }
+    }
+	drmHwcLayer->uFourccFormat_ = DRM_FORMAT_NV12;
+  }
+  drmHwcLayer->Init();
+  drmHwcLayer->uColorSpace = V4L2_COLORSPACE_JPEG;
+  return 0;
+}
+#endif
 void DrmHwcTwo::HwcLayer::DumpLayerInfo(String8 &output) {
 
   output.appendFormat( " %04" PRIu32 " | %03" PRIu32 " | %9s | %9s | %-18.18" PRIxPTR " |"

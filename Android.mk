@@ -218,6 +218,18 @@ LOCAL_REQUIRED_MODULES += \
 	HwcSvepEnv.xml
 endif
 
+# BOARD_USES_LIBPQ=true
+ifeq ($(strip $(BOARD_USES_LIBPQ)),true)
+LOCAL_C_INCLUDES += \
+  hardware/rockchip/libpq/include
+
+LOCAL_SHARED_LIBRARIES += \
+	libpq
+
+LOCAL_CFLAGS += \
+	-DUSE_LIBPQ=1
+endif
+
 LOCAL_MODULE := hwcomposer.$(TARGET_BOARD_HARDWARE)
 LOCAL_REQUIRED_MODULES += \
 	HwComposerEnv.xml

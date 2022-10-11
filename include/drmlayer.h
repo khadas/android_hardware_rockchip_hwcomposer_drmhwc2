@@ -258,6 +258,9 @@ struct DrmHwcLayer {
   bool bUseSvep_;
   std::shared_ptr<DrmBuffer> pSvepBuffer_;
 
+  bool bUsePq_;
+  std::shared_ptr<DrmBuffer> pPqBuffer_;
+
   DrmLayerInfoStore storeLayerInfo_;
 
   int ImportBuffer(Importer *importer);

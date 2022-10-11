@@ -30,6 +30,9 @@
 #include "Svep.h"
 #endif
 
+#ifdef USE_LIBPQ
+#include "Pq.h"
+#endif
 #include <hardware/hwcomposer2.h>
 
 #include <map>
@@ -487,6 +490,7 @@ class DrmHwcTwo : public hwc2_device_t {
     }
 
     int DoSvep(bool validate, DrmHwcLayer *drmHwcLayer);
+    int DoPq(bool validate, DrmHwcLayer *drmHwcLayer, hwc2_drm_display_t* ctx);
 
     // Layer hooks
     HWC2::Error SetCursorPosition(int32_t x, int32_t y);
@@ -543,6 +547,12 @@ class DrmHwcTwo : public hwc2_device_t {
     // DRM Resource
     DrmGralloc *drmGralloc_;
     DrmDevice *drm_;
+#ifdef USE_LIBPQ
+    std::shared_ptr<DrmBufferQueue> bufferQueue_;
+    Pq* pq_;
+    bool bPqReady_;
+    PqContext pqCtx_;
+#endif
   };
 
   struct HwcCallback {

@@ -297,6 +297,15 @@ int Vop3588::TryHwcPolicy(
     }
   }
 
+#ifdef USE_LIBPQ
+  // Try to match GLES policy
+  if(ctx.state.setHwcPolicy.count(HWC_GLES_SIDEBAND_LOPICY)){
+    ret = TryGlesSidebandPolicy(composition,layers,crtc,plane_groups);
+    if(!ret)
+      return 0;
+  }
+#endif
+
   // Try to match GLES policy
   if(ctx.state.setHwcPolicy.count(HWC_GLES_POLICY)){
     ret = TryGLESPolicy(composition,layers,crtc,plane_groups);
@@ -1683,6 +1692,60 @@ int Vop3588::TryRgaOverlayPolicy(
   return -1;
 }
 
+#ifdef USE_LIBPQ
+/*************************mix SidebandStream*************************
+   DisplayId=0, Connector 345, Type = HDMI-A-1, Connector state = DRM_MODE_CONNECTED , frame_no = 6611
+  ------+-----+-----------+-----------+--------------------+-------------+------------+--------------------------------+------------------------+------------+------------
+    id  |  z  |  sf-type  |  hwc-type |       handle       |  transform  |    blnd    |     source crop (l,t,r,b)      |          frame         | dataspace  | name
+  ------+-----+-----------+-----------+--------------------+-------------+------------+--------------------------------+------------------------+------------+------------
+   0050 | 000 |  Sideband |    Device | 000000000000000000 | None        | None       |    0.0,    0.0,   -1.0,   -1.0 |    0,    0, 1920, 1080 |          0 | allocateBuffer
+   0059 | 001 |    Device |    Client | 00b40000751ec3ec30 | None        | Premultipl | 1829.0,   20.0, 1900.0,   59.0 | 1829,   20, 1900,   59 |          0 | com.tencent.start.tv/com.tencent.start.ui.PlayActivity#0
+   0071 | 002 |    Device |    Client | 00b40000751ec403d0 | None        | Premultipl |    0.0,    0.0,  412.0, 1080.0 | 1508,    0, 1920, 1080 |          0 | PopupWindow:55de2f2#0
+  ------+-----+-----------+-----------+--------------------+-------------+------------+--------------------------------+------------------------+------------+------------
+************************************************************/
+int Vop3588::TryGlesSidebandPolicy(
+    std::vector<DrmCompositionPlane> *composition,
+    std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
+    std::vector<PlaneGroup *> &plane_groups) {
+  ALOGD_IF(LogLevel(DBG_DEBUG), "%s:line=%d",__FUNCTION__,__LINE__);
+  ResetLayer(layers);
+  ResetPlaneGroups(plane_groups);
+  std::vector<DrmHwcLayer *> tmp_layers;
+  //save fb into tmp_layers
+  MoveFbToTmp(layers, tmp_layers);
+
+  int iPlaneSize = plane_groups.size();
+  std::pair<int, int> layer_indices(-1, -1);
+
+  int sideband_index = -1;
+  for(auto& layer : layers){
+    if(layer->bSidebandStreamLayer_){
+      sideband_index = layer->iDrmZpos_;
+    }
+  }
+  if(sideband_index != 0){
+    ALOGD_IF(LogLevel(DBG_DEBUG), "%s:gles sideband index (%d), skip!",__FUNCTION__, sideband_index);
+    ResetLayerFromTmp(layers,tmp_layers);
+    return -1;
+  }
+
+  if((layers.size() - 1) > 1){
+    layer_indices.first = sideband_index + 1;
+    layer_indices.second = layers.size() - 1;
+  }
+
+  ALOGD_IF(LogLevel(DBG_DEBUG), "%s:gles sideband (%d,%d)",__FUNCTION__,layer_indices.first, layer_indices.second);
+  OutputMatchLayer(layer_indices.first, layer_indices.second, layers, tmp_layers);
+  int ret = MatchPlanes(composition,layers,crtc,plane_groups);
+  if(!ret){
+    return ret;
+  }
+
+  ResetLayerFromTmp(layers,tmp_layers);
+  return ret;
+}
+#endif
+
 /*************************mix SidebandStream*************************
    DisplayId=0, Connector 345, Type = HDMI-A-1, Connector state = DRM_MODE_CONNECTED , frame_no = 6611
   ------+-----+-----------+-----------+--------------------+-------------+------------+--------------------------------+------------------------+------------+------------
@@ -2879,6 +2942,21 @@ int Vop3588::InitContext(
 
 #ifdef USE_LIBSVEP
   TrySvepOverlay();
+#endif
+
+#ifdef USE_LIBPQ
+  int iPqMode = hwc_get_int_property("persist.vendor.pq.mode","0");
+  // Match policy first
+  HWC2_ALOGD_IF_DEBUG("%s=%d ","persist.vendor.pq.mode", iPqMode);
+  if(iPqMode > 0){
+  //   DrmDevice *drm = crtc->getDrmDevice();
+  //   DrmConnector *conn = drm->GetConnectorForDisplay(crtc->display());
+    ctx.state.setHwcPolicy.insert(HWC_GLES_POLICY);
+    if(ctx.request.bSidebandStreamMode){
+      ctx.state.setHwcPolicy.insert(HWC_GLES_SIDEBAND_LOPICY);
+    }
+    return 0;
+  }
 #endif
 
   if(!TryOverlay())

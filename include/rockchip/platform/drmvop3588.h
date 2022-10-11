@@ -82,6 +82,7 @@ typedef enum tagComposeMode{
    HWC_MIX_DOWN_LOPICY,
    HWC_MIX_LOPICY,
    HWC_SIDEBAND_LOPICY,
+   HWC_GLES_SIDEBAND_LOPICY,
    HWC_GLES_POLICY,
    HWC_RGA_OVERLAY_LOPICY,
    HWC_SVEP_OVERLAY_LOPICY,
@@ -242,6 +243,11 @@ struct SvepXml{
                     std::vector<PlaneGroup *> &plane_groups);
 #ifdef USE_LIBSVEP
   int TrySvepPolicy(std::vector<DrmCompositionPlane> *composition,
+                        std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
+                        std::vector<PlaneGroup *> &plane_groups);
+#endif
+#ifdef USE_LIBPQ
+  int TryGlesSidebandPolicy(std::vector<DrmCompositionPlane> *composition,
                         std::vector<DrmHwcLayer*> &layers, DrmCrtc *crtc,
                         std::vector<PlaneGroup *> &plane_groups);
 #endif

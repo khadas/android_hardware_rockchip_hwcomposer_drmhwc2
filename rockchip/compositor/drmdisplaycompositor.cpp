@@ -669,7 +669,7 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
     }
   }
 
-  if(plane->colorspace_property().id()) {
+  /*if(plane->colorspace_property().id()) {
     ret = drmModeAtomicAddProperty(pset, plane->id(),
                                   plane->colorspace_property().id(),
                                   colorspace) < 0;
@@ -678,7 +678,7 @@ int DrmDisplayCompositor::CommitSidebandStream(drmModeAtomicReqPtr pset,
             plane->colorspace_property().id(), plane->id());
       return ret;
     }
-  }
+  }*/
 
   HWC2_ALOGD_IF_INFO("SidebandStreamLayer plane-id=%d name=%s zpos=%d crtc-id=%d not to commit frame.",
                       plane->id(), plane->name(),zpos, crtc_id);
