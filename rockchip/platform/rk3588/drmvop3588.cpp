@@ -2928,6 +2928,9 @@ int Vop3588::InitContext(
 
   if((iMode!=1 || gles_policy) && iMode != 2){
     ctx.state.setHwcPolicy.insert(HWC_GLES_POLICY);
+    if(ctx.request.bSidebandStreamMode){
+        ctx.state.setHwcPolicy.insert(HWC_GLES_SIDEBAND_LOPICY);
+    }
     ALOGD_IF(LogLevel(DBG_DEBUG),"Force use GLES compose, iMode=%d, gles_policy=%d, soc_id=%x",iMode,gles_policy,ctx.state.iSocId);
     return 0;
   }
