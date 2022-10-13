@@ -3120,8 +3120,8 @@ int DrmHwcTwo::HwcLayer::DoPq(bool validate, DrmHwcLayer *drmHwcLayer, hwc2_drm_
                                                     HAL_PIXEL_FORMAT_YCrCb_NV12_10,
                                                     // PQ 算法要求 256 对齐，Gralloc可用的只有256奇数倍对齐
                                                     // 暂时按照 256 奇数倍对齐，后续查看情况
-                                                    // TODO:
-                                                    RK_GRALLOC_USAGE_STRIDE_ALIGN_256_ODD_TIMES |
+                                                    // TODO: 最终PQ库内部修改为64对齐即可
+                                                    RK_GRALLOC_USAGE_STRIDE_ALIGN_64 |
                                                     MALI_GRALLOC_USAGE_NO_AFBC,
                                                     "PQ-FB-target");
 
