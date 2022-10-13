@@ -1902,21 +1902,19 @@ int DrmDevice::ReleaseDpyResByMirror(int display_id,
   for(auto &temp_conn : connectors_){
     if(temp_conn.get() == conn)
       continue;
-    if(temp_conn->hwc_state() == MIRROR_CRTC){
-      if(temp_conn->encoder() &&
-          temp_conn->encoder()->crtc() &&
-          temp_conn->encoder()->crtc() == crtc){
-        int temp_display_id = temp_conn->display();
-        DrmCrtc* temp_crtc = temp_conn->encoder()->crtc();
-        ret = ReleaseConnectorAndCrtcNoCommit(temp_display_id, temp_conn.get(), temp_crtc, pset);
-        if(ret){
-          HWC2_ALOGE("Add display-id=%d %s-%d Crtc-id=%d Release req Fail!.",
-                      temp_display_id, connector_type_str(temp_conn->type()),
-                      temp_conn->type_id(), temp_crtc->id());
-          return ret;
-        }
-        store_mirror_conn.push_back(temp_conn.get());
+    if(temp_conn->encoder() &&
+        temp_conn->encoder()->crtc() &&
+        temp_conn->encoder()->crtc() == crtc){
+      int temp_display_id = temp_conn->display();
+      DrmCrtc* temp_crtc = temp_conn->encoder()->crtc();
+      ret = ReleaseConnectorAndCrtcNoCommit(temp_display_id, temp_conn.get(), temp_crtc, pset);
+      if(ret){
+        HWC2_ALOGE("Add display-id=%d %s-%d Crtc-id=%d Release req Fail!.",
+                    temp_display_id, connector_type_str(temp_conn->type()),
+                    temp_conn->type_id(), temp_crtc->id());
+        return ret;
       }
+      store_mirror_conn.push_back(temp_conn.get());
     }
   }
 
