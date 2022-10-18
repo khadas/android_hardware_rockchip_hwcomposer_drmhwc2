@@ -1752,6 +1752,12 @@ HWC2::Error DrmHwcTwo::HwcDisplay::PresentVirtualDisplay(int32_t *retire_fence) 
         output_layer_.DumpData();
       }
     }
+  }else{
+    if(client_layer_.acquire_fence() != NULL){
+      if(client_layer_.acquire_fence()->wait(1500)){
+          HWC2_ALOGE("WB client layer wait acquirefence 1500ms timeout!");
+      }
+    }
   }
 
   ++frame_no_;
@@ -2148,8 +2154,34 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateVirtualDisplay(uint32_t *num_types,
       }
     }
 
+    HWC2_ALOGI("frame_no_ = %d", frame_no_);
     if(frame_no_ < 5)
       bUseWriteBack_ = false;
+
+    // 检查主屏状态，如果状态异常则使用GPU合成
+    int WBDisplayId = resource_manager_->GetWBDisplay();
+    if(WBDisplayId >= 0){
+      DrmConnector *connector = drm_->GetConnectorForDisplay(WBDisplayId);
+      if (!connector) {
+        HWC2_ALOGD_IF_DEBUG("Failed to get WB connector for display %d", WBDisplayId);
+        bUseWriteBack_ = false;
+      }else{
+        if(connector->state() != DRM_MODE_CONNECTED){
+          HWC2_ALOGD_IF_DEBUG("WB Connector %u type=%s, type_id=%d, state is DRM_MODE_DISCONNECTED, skip init\n",
+                connector->id(),drm_->connector_type_str(connector->type()),connector->type_id());
+          bUseWriteBack_ = false;
+        }
+
+        DrmCrtc *crtc = drm_->GetCrtcForDisplay(WBDisplayId);
+        if (!crtc) {
+          HWC2_ALOGD_IF_DEBUG("Failed to get crtc for WB display %d", WBDisplayId);
+          bUseWriteBack_ = false;
+        }
+      }
+    }else{
+      bUseWriteBack_ = false;
+      HWC2_ALOGD_IF_DEBUG("WB display %d is invalid, disable HW VDS.", WBDisplayId);
+    }
 
     for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
       DrmHwcTwo::HwcLayer &layer = l.second;
