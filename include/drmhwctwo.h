@@ -411,7 +411,7 @@ class DrmHwcTwo : public hwc2_device_t {
         pBufferInfo_->iWidth_  = drmGralloc_->hwc_get_handle_attibute(sidebandStreamHandle_,ATT_WIDTH);
         pBufferInfo_->iHeight_ = drmGralloc_->hwc_get_handle_attibute(sidebandStreamHandle_,ATT_HEIGHT);
         pBufferInfo_->iStride_ = drmGralloc_->hwc_get_handle_attibute(sidebandStreamHandle_,ATT_STRIDE);
-        pBufferInfo_->iHeightStride_ = drmGralloc_->hwc_get_handle_attibute(buffer_,ATT_HEIGHT_STRIDE);
+        pBufferInfo_->iHeightStride_ = drmGralloc_->hwc_get_handle_attibute(sidebandStreamHandle_,ATT_HEIGHT_STRIDE);
         pBufferInfo_->iByteStride_ = drmGralloc_->hwc_get_handle_attibute(sidebandStreamHandle_,ATT_BYTE_STRIDE_WORKROUND);
         pBufferInfo_->iFormat_ = drmGralloc_->hwc_get_handle_attibute(sidebandStreamHandle_,ATT_FORMAT);
         pBufferInfo_->iUsage_   = drmGralloc_->hwc_get_handle_usage(sidebandStreamHandle_);
