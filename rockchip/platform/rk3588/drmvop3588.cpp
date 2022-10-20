@@ -297,14 +297,12 @@ int Vop3588::TryHwcPolicy(
     }
   }
 
-#ifdef USE_LIBPQ
   // Try to match GLES policy
   if(ctx.state.setHwcPolicy.count(HWC_GLES_SIDEBAND_LOPICY)){
     ret = TryGlesSidebandPolicy(composition,layers,crtc,plane_groups);
     if(!ret)
       return 0;
   }
-#endif
 
   // Try to match GLES policy
   if(ctx.state.setHwcPolicy.count(HWC_GLES_POLICY)){
@@ -1692,7 +1690,6 @@ int Vop3588::TryRgaOverlayPolicy(
   return -1;
 }
 
-#ifdef USE_LIBPQ
 /*************************mix SidebandStream*************************
    DisplayId=0, Connector 345, Type = HDMI-A-1, Connector state = DRM_MODE_CONNECTED , frame_no = 6611
   ------+-----+-----------+-----------+--------------------+-------------+------------+--------------------------------+------------------------+------------+------------
@@ -1744,7 +1741,6 @@ int Vop3588::TryGlesSidebandPolicy(
   ResetLayerFromTmp(layers,tmp_layers);
   return ret;
 }
-#endif
 
 /*************************mix SidebandStream*************************
    DisplayId=0, Connector 345, Type = HDMI-A-1, Connector state = DRM_MODE_CONNECTED , frame_no = 6611
